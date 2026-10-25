@@ -10,6 +10,8 @@ import { hour, stateNum, temp, weekday } from "../util/format";
 import { weatherIcon } from "../util/icons";
 import { temperatureBlender } from "../util/blend";
 import { withMeasuredToday } from "../util/today";
+import { isPreset } from "../data/range";
+import { setRangeState } from "../data/range-sync";
 
 type Tab = "forecast" | "history";
 
@@ -43,6 +45,7 @@ export class WetterApp extends LitElement {
   setConfig(config: WetterConfig): void {
     if (!config?.weather) throw new Error("`weather:` fehlt (z. B. weather.weather_fusion_ai_kresslingweg)");
     this._config = { ...config, sensors: { ...config.sensors } };
+    if (this.isConnected) this.applyLink();
   }
 
   static getStubConfig(hass: HomeAssistant): Partial<WetterConfig> {
@@ -65,10 +68,39 @@ export class WetterApp extends LitElement {
       if (wide !== this._wide) this._wide = wide;
     });
     this._ro.observe(this);
+    this.applyLink();
+    window.addEventListener("location-changed", this._onLocation);
+  }
+
+  private _onLocation = () => this.applyLink();
+
+  /**
+   * Sprung-Link von der Kompakt-Karte: ?wetter=forecast | day:<Index>[:<temp|rain|wind>] | history:<day|7d|30d|month|year>.
+   * Wird einmal angewendet und aus der Adresse entfernt (sonst greift er nach Neuladen erneut).
+   */
+  private applyLink(): void {
+    const params = new URLSearchParams(location.search);
+    const v = params.get("wetter");
+    if (!v || !this._config) return;
+    const [what, arg, metric] = v.split(":");
+    if (what === "history") {
+      this._tab = "history";
+      this._detail = undefined;
+      if (isPreset(arg)) setRangeState(this._config.sync_group ?? "default", { preset: arg, offset: 0 });
+    } else {
+      this._tab = "forecast";
+      const i = what === "day" ? parseInt(arg, 10) : NaN;
+      this._detail = isFinite(i) && i >= 0 ? i : undefined;
+      if (metric === "temp" || metric === "rain" || metric === "wind") this._metric = metric;
+    }
+    params.delete("wetter");
+    const q = params.toString();
+    history.replaceState(history.state, "", location.pathname + (q ? "?" + q : "") + location.hash);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    window.removeEventListener("location-changed", this._onLocation);
     this._ro?.disconnect();
     this._hoursRo?.disconnect();
     this._hoursEl = undefined;

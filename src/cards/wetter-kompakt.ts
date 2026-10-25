@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { ForecastController } from "../data/forecast";
 import { fetchStatistics } from "../data/statistics";
 import { cardStyles } from "../components/styles";
-import type { HomeAssistant, StatResult, StatValue, WetterConfig } from "../types";
+import type { ForecastItem, HomeAssistant, StatResult, StatValue, WetterConfig } from "../types";
 import { conditionLabel } from "../util/conditions";
 import { compass, hour, num, stateNum, temp, weekday } from "../util/format";
 import { weatherIcon } from "../util/icons";
@@ -13,8 +13,12 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
 export interface KompaktConfig extends WetterConfig {
-  /** Unteransicht mit der kompletten Wetter-App, z. B. /dashboard-handy/wetter-app — sonst kein Knopf */
+  /** Unteransicht mit der kompletten Wetter-App, z. B. /dashboard-handy/wetter-app — ohne: Karte nicht antippbar */
   navigation_path?: string;
+  /** true = Knopf „Wetter-App öffnen“ statt antippbarer Bereiche (die springen direkt an die passende Stelle) */
+  open_button?: boolean;
+  /** periods (Standard) = Vormittag/Nachmittag/Abend/Nacht, hours = einzelne Stunden */
+  forecast?: "periods" | "hours";
 }
 
 /** Messwerte für die Kachelzeile: Regen heute / 7 Tage, stärkste Böe heute, Temperatur-Min/Max heute */
@@ -127,11 +131,17 @@ export class WetterKompakt extends LitElement {
     };
   }
 
-  private open(): void {
+  /** Wetter-App öffnen, optional direkt an einer Stelle (siehe applyLink in der App) */
+  private open(link?: string): void {
     const path = this._config.navigation_path;
     if (!path) return;
-    history.pushState(null, "", path);
+    history.pushState(null, "", link ? `${path}${path.includes("?") ? "&" : "?"}wetter=${link}` : path);
     window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+  }
+
+  /** Antippbare Bereiche: nur mit navigation_path und ohne open_button */
+  private tap(link: string) {
+    return this._config.navigation_path && !this._config.open_button ? () => this.open(link) : undefined;
   }
 
   protected render() {
@@ -144,11 +154,11 @@ export class WetterKompakt extends LitElement {
     const feels = stateNum(this.hass, s.feels_like);
     const daily = withMeasuredToday(this.daily.forecast, this._m.temp, nowTemp);
     const today = daily?.[0];
-    const nav = !!this._config.navigation_path;
+    const taps = !!this._config.navigation_path && !this._config.open_button;
 
     return html`
-      <div class="card ${this.hass.themes?.darkMode ? "dark" : ""}">
-        <div class="now ${nav ? "link" : ""}" @click=${() => this.open()}>
+      <div class="card ${this.hass.themes?.darkMode ? "dark" : ""} ${taps ? "taps" : ""}">
+        <div class="now t-able" @click=${this.tap("forecast")}>
           <div class="ic">${weatherIcon(w.state, night)}</div>
           <div class="t">${temp(nowTemp)}</div>
           <div class="info">
@@ -160,13 +170,19 @@ export class WetterKompakt extends LitElement {
             ${feels != null ? html`<div class="sub">Gefühlt ${temp(feels)}</div>` : nothing}
           </div>
         </div>
-        ${this.renderHours(nowTemp, night)}
+        ${this._config.forecast === "hours" ? this.renderHours(nowTemp, night) : this.renderPeriods(daily)}
         ${daily ? this.renderDays(daily.slice(1, 4)) : nothing}
         ${this.renderStats()}
-        ${nav ? html`<button class="open" @click=${() => this.open()}>
+        ${this._config.navigation_path && this._config.open_button ? html`<button class="open" @click=${() => this.open()}>
           <ha-icon icon="mdi:weather-partly-cloudy"></ha-icon>Wetter-App öffnen<ha-icon icon="mdi:chevron-right"></ha-icon></button>` : nothing}
       </div>
     `;
+  }
+
+  /** Index des Tages in der Tagesvorhersage zu Zeitpunkt t (für den Sprung ins Tagesdetail) */
+  private dayOf(t: number): number {
+    const day = new Date(t).setHours(0, 0, 0, 0);
+    return Math.max(0, (this.daily.forecast ?? []).findIndex((d) => new Date(d.datetime).setHours(0, 0, 0, 0) === day));
   }
 
   private renderHours(nowTemp: number | undefined, night: boolean) {
@@ -176,21 +192,37 @@ export class WetterKompakt extends LitElement {
     const items = fc.filter((f) => new Date(f.datetime).getTime() > from).slice(0, this._cols);
     const blend = temperatureBlender(fc, nowTemp);
     return html`<div class="hours" style="grid-template-columns:repeat(${items.length}, minmax(0, 1fr))">
-      ${items.map((f, i) => html`<div class="hr">
+      ${items.map((f, i) => html`<div class="hr t-able" @click=${this.tap(`day:${this.dayOf(new Date(f.datetime).getTime())}:temp`)}>
         <div class="lab">${i === 0 ? "Jetzt" : hour(new Date(f.datetime)).replace(" Uhr", "")}</div>
         ${weatherIcon(f.condition, i === 0 ? night : f.is_daytime === false)}
-        <div class="p">${(f.precipitation_probability ?? 0) >= 20 ? `${Math.round(f.precipitation_probability!)} %` : ""}</div>
+        <div class="p">${prob(f.precipitation_probability)}</div>
         <div class="v">${temp(i === 0 ? nowTemp ?? f.temperature : blend(new Date(f.datetime).getTime(), f.temperature))}</div>
       </div>`)}
     </div>`;
   }
 
-  private renderDays(days: NonNullable<ReturnType<typeof withMeasuredToday>>) {
+  /** Nächste vier Tagesabschnitte (Vormittag/Nachmittag/Abend/Nacht) statt einzelner Stunden */
+  private renderPeriods(daily: ForecastItem[] | undefined) {
+    const fc = this.hourly.forecast;
+    if (!fc) return html`<div class="loading">Lade Vorhersage …</div>`;
+    const list = periods(fc, Date.now(), daily);
+    if (!list.length) return nothing;
+    return html`<div class="hours" style="grid-template-columns:repeat(${list.length}, minmax(0, 1fr))">
+      ${list.map((p) => html`<div class="hr t-able" @click=${this.tap(`day:${this.dayOf(p.start)}:temp`)}>
+        <div class="lab">${p.label}<small>${p.sub ?? " "}</small></div>
+        ${weatherIcon(p.condition, p.night)}
+        <div class="p">${prob(p.prob)}</div>
+        <div class="v">${p.lo == null ? "–" : Math.round(p.lo) === Math.round(p.hi!) ? temp(p.hi) : `${num(p.lo, 0)}–${temp(p.hi)}`}</div>
+      </div>`)}
+    </div>`;
+  }
+
+  private renderDays(days: ForecastItem[]) {
     if (!days.length) return nothing;
     return html`<div class="days">
-      ${days.map((d) => html`<div class="day">
+      ${days.map((d, i) => html`<div class="day t-able" @click=${this.tap(`day:${i + 1}:temp`)}>
         <div class="top"><span class="wd">${weekday(new Date(d.datetime))}</span>${weatherIcon(d.condition)}
-          <span class="p">${(d.precipitation_probability ?? 0) >= 20 ? `${Math.round(d.precipitation_probability!)} %` : ""}</span></div>
+          <span class="p">${prob(d.precipitation_probability)}</span></div>
         <div class="tt"><span class="lo">${temp(d.templow)}</span> / <span class="hi">${temp(d.temperature)}</span></div>
       </div>`)}
     </div>`;
@@ -203,11 +235,11 @@ export class WetterKompakt extends LitElement {
     const wind = stateNum(this.hass, s.wind_speed);
     const dir = stateNum(this.hass, s.wind_direction);
     const tiles = [
-      s.rain_total && html`<div class="st"><span>Regen heute</span><b>${num(m.rainToday, 1)} l/m²</b>
-        <small>${rate ? `jetzt ${num(rate, 1)} l/m²/h` : "trocken"}</small></div>`,
-      s.rain_total && html`<div class="st"><span>Regen 7 Tage</span><b>${num(m.rain7, 1)} l/m²</b>
+      s.rain_total && html`<div class="st t-able" @click=${this.tap("history:day")}><span>Regen heute</span><b>${num(m.rainToday, 1)} l/m²</b>
+        <small>${rate ? `jetzt ${num(rate, 1)} l/m²/h` : "seit 0 Uhr"}</small></div>`,
+      s.rain_total && html`<div class="st t-able" @click=${this.tap("history:7d")}><span>Regen 7 Tage</span><b>${num(m.rain7, 1)} l/m²</b>
         <small>seit ${weekday(new Date(Date.now() - 6 * DAY))} 0 Uhr</small></div>`,
-      s.wind_speed && html`<div class="st"><span>Wind</span><b>${num(wind, 0)} km/h ${dir != null ? compass(dir) : ""}</b>
+      s.wind_speed && html`<div class="st t-able" @click=${this.tap("history:day")}><span>Wind</span><b>${num(wind, 0)} km/h ${dir != null ? compass(dir) : ""}</b>
         <small>${m.gustMax != null ? `Böen ${num(m.gustMax, 0)} km/h` : ""}</small></div>`,
     ].filter(Boolean);
     return tiles.length ? html`<div class="stats">${tiles}</div>` : nothing;
@@ -220,7 +252,10 @@ export class WetterKompakt extends LitElement {
       .card { display: flex; flex-direction: column; gap: 10px; }
       .warn, .loading { color: var(--wa-text2); font-size: 14px; padding: 8px 0; }
       .now { display: flex; align-items: center; gap: 10px; }
-      .now.link { cursor: pointer; }
+      /* antippbare Bereiche: Zeiger + kurzes Abdunkeln beim Tippen */
+      .taps .t-able { cursor: pointer; border-radius: 10px; -webkit-tap-highlight-color: transparent; }
+      .taps .t-able:active { background: rgba(127, 127, 127, 0.18); }
+      .taps .st.t-able:active, .taps .day.t-able:active { background: rgba(127, 127, 127, 0.22); }
       .now .ic .wicon { width: 48px; height: 48px; }
       .now .t { font-size: 40px; font-weight: 600; line-height: 1; }
       .info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
@@ -230,7 +265,8 @@ export class WetterKompakt extends LitElement {
 
       .hours { display: grid; gap: 2px; border-top: 1px solid var(--wa-divider); padding-top: 8px; }
       .hr { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
-      .hr .lab { font-size: 12px; color: var(--wa-text2); }
+      .hr .lab { font-size: 12px; color: var(--wa-text2); text-align: center; line-height: 1.25; white-space: nowrap; }
+      .hr .lab small { display: block; font-size: 11px; opacity: 0.8; }
       .hr .wicon { width: 28px; height: 28px; }
       .p { font-size: 11px; color: var(--wa-rain); font-weight: 500; min-height: 13px; line-height: 13px; }
       .hr .v { font-size: 15px; font-weight: 500; }
@@ -260,4 +296,51 @@ export class WetterKompakt extends LitElement {
       .open ha-icon { --mdc-icon-size: 18px; }
     `,
   ];
+}
+
+const prob = (p: number | undefined) => ((p ?? 0) >= 20 ? `${Math.round(p!)} %` : "");
+
+interface Period { start: number; label: string; sub?: string; condition?: string; night: boolean; prob?: number; lo?: number; hi?: number }
+
+const BLOCKS: Record<number, string> = { 0: "Nacht", 6: "Vormittag", 12: "Nachmittag", 18: "Abend" };
+// je weiter vorne, desto „wichtiger“ fürs Symbol eines Abschnitts
+const SEVERITY = ["lightning-rainy", "lightning", "hail", "pouring", "snowy-rainy", "snowy", "rainy", "fog", "cloudy", "windy-variant", "partlycloudy", "windy", "sunny", "clear-night"];
+
+/**
+ * Stundenvorhersage → die nächsten vier 6-Stunden-Abschnitte ab dem laufenden.
+ * Symbol: das „schlimmste“ Wetter, das mind. ein Drittel des Abschnitts ausmacht, sonst das häufigste.
+ * Laufender Abschnitt nur ab jetzt; Temperatur als Spanne, Regen als höchste Wahrscheinlichkeit.
+ */
+function periods(fc: ForecastItem[], now: number, daily: ForecastItem[] | undefined): Period[] {
+  const d = new Date(now);
+  const first = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(d.getHours() / 6) * 6).getTime();
+  const today = new Date(now).setHours(0, 0, 0, 0);
+  const out: Period[] = [];
+  for (let k = 0; k < 4; k++) {
+    // über Zeitumstellungen hinweg sauber: Stunde per Date setzen statt +6 h rechnen
+    const s = new Date(first); s.setHours(s.getHours() + k * 6);
+    const e = new Date(first); e.setHours(e.getHours() + (k + 1) * 6);
+    const from = k === 0 ? now - HOUR : s.getTime() - 1;
+    const hrs = fc.filter((f) => { const t = new Date(f.datetime).getTime(); return t > from && t < e.getTime(); });
+    if (!hrs.length) continue;
+    const count = new Map<string, number>();
+    hrs.forEach((h) => h.condition && count.set(h.condition, (count.get(h.condition) ?? 0) + 1));
+    const severe = SEVERITY.find((c) => (count.get(c) ?? 0) >= Math.max(1, hrs.length / 3));
+    const common = [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const temps = hrs.map((h) => h.temperature).filter((v): v is number => v != null);
+    const h0 = s.getHours();
+    // Nacht 0–6 Uhr gehört zum Abend davor → „morgen“ erst ab dem Vormittag des nächsten Tages
+    const tomorrow = new Date(s).setHours(0, 0, 0, 0) > today && h0 !== 0;
+    out.push({
+      start: s.getTime(),
+      label: BLOCKS[h0] ?? `${h0} Uhr`,
+      sub: k === 0 ? "jetzt" : tomorrow ? "morgen" : undefined,
+      condition: severe ?? common ?? daily?.[0]?.condition,
+      night: hrs.filter((h) => h.is_daytime === false).length > hrs.length / 2,
+      prob: Math.max(0, ...hrs.map((h) => h.precipitation_probability ?? 0)),
+      lo: temps.length ? Math.min(...temps) : undefined,
+      hi: temps.length ? Math.max(...temps) : undefined,
+    });
+  }
+  return out;
 }

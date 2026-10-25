@@ -6,6 +6,16 @@ import { css, html } from "lit";
 export const head = (icon: string, title: string) =>
   html`<div class="head"><ha-icon icon=${icon}></ha-icon><span>${title}</span></div>`;
 
+/** Farben der Wettersymbole (Variablen kommen vom Karten-Host) — auch für Bausteine ohne cardStyles */
+export const iconStyles = css`
+  .wicon { display: block; }
+  .wicon .c1 { fill: var(--wa-cloud); }
+  .wicon .c2 { fill: var(--wa-cloud2); }
+  .wicon .mo { fill: var(--wa-moon); }
+  .wicon .ln { stroke: var(--wa-cloud2); }
+  .wicon .fl { fill: var(--wa-cloud2); }
+`;
+
 export const cardStyles = css`
   :host {
     --wa-text: var(--primary-text-color);
@@ -45,12 +55,7 @@ export const cardStyles = css`
   /* lange Titel in schmalen Kacheln (z. B. „Sonnenuntergang“) kürzen statt über den Rand laufen */
   .head span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .wicon { display: block; }
-  .wicon .c1 { fill: var(--wa-cloud); }
-  .wicon .c2 { fill: var(--wa-cloud2); }
-  .wicon .mo { fill: var(--wa-moon); }
-  .wicon .ln { stroke: var(--wa-cloud2); }
-  .wicon .fl { fill: var(--wa-cloud2); }
+  ${iconStyles}
 
   .warn {
     background: rgba(var(--rgb-warning-color, 255, 166, 0), 0.15); color: var(--wa-text);

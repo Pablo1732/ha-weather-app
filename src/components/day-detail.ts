@@ -239,7 +239,12 @@ export class WetterDayDetail extends LitElement {
     return html`
       <wetter-app-chart .start=${start} .end=${end} .series=${series} .ticks=${ticks} .markers=${markers}
         .now=${now} .height=${this.chartHeight()} .yUnit=${yUnit} .yMin=${yMin} .rightMax=${rightMax} .rightUnit=${rightUnit}
-        .timeFormat=${(t: number) => new Date(t).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}>
+        .timeFormat=${(t: number) => new Date(t).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+        .tipIcon=${(t: number) => {
+          // Wettersymbol der Vorhersage-Stunde unter dem Mauszeiger (vergangene Stunden: keins)
+          const f = fc.find((p) => p.t <= t && t < p.t + HOUR)?.h;
+          return f?.condition ? weatherIcon(f.condition, f.is_daytime === false) : nothing;
+        }}>
       </wetter-app-chart>
       ${this.metric === "wind" ? this.renderWindDirs(start, future) : nothing}
       ${this.metric === "rain" ? legend([

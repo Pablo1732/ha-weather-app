@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, svg, type PropertyValues, type SVGTemplateResult } from "lit";
 import { num } from "../util/format";
 import { onOtherTip, tipOpened } from "../util/tip-bus";
+import { iconStyles } from "./styles";
 
 // Schlankes SVG-Zeitdiagramm (Linie, Fläche, Band, Balken) — ersetzt schwere Chart-Bibliotheken.
 // Rendert nur bei geänderten Daten oder Breite; Antippen/Hovern zeigt Werte zum Zeitpunkt.
@@ -59,6 +60,7 @@ export class WetterChart extends LitElement {
     rightMax: { type: Number },
     rightUnit: { type: String },
     timeFormat: { attribute: false },
+    tipIcon: { attribute: false },
     _w: { state: true },
     _hover: { state: true },
   };
@@ -76,6 +78,8 @@ export class WetterChart extends LitElement {
   rightMax?: number;
   rightUnit = "";
   timeFormat: (t: number) => string = (t) => new Date(t).toLocaleString("de-DE");
+  /** optionales Symbol im Tooltip neben der Uhrzeit (z. B. Wetter dieser Stunde) */
+  tipIcon?: (t: number) => unknown;
   private _w = 0;
   private _hover?: number;
   private _ro?: ResizeObserver;
@@ -341,7 +345,7 @@ export class WetterChart extends LitElement {
       }
       // Box neben der Linie, innerhalb des Diagramms → verdeckt nichts darüber
       const side = x > w / 2 ? `right:${w - x + 8}px` : `left:${x + 8}px`;
-      tip = html`<div class="tip" style="${side}"><b>${this.timeFormat(t)}</b>
+      tip = html`<div class="tip" style="${side}"><div class="th"><b>${this.timeFormat(t)}</b>${this.tipIcon?.(t) ?? nothing}</div>
         ${rows.map((r) => html`<div class="tr"><i style="background:${r.color}"></i><span>${r.label}</span><b>${r.value}</b></div>`)}</div>`;
     }
 
@@ -356,7 +360,7 @@ export class WetterChart extends LitElement {
     `;
   }
 
-  static styles = css`
+  static styles = [iconStyles, css`
     :host { display: block; width: 100%; touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
     .wrap { position: relative; }
     svg { display: block; overflow: visible; }
@@ -380,11 +384,13 @@ export class WetterChart extends LitElement {
       border: 1px solid var(--divider-color); border-radius: 8px; padding: 6px 8px; font-size: 12px;
       display: flex; flex-direction: column; gap: 3px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     }
+    .th { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 18px; }
+    .th .wicon { width: 26px; height: 26px; margin: -4px -2px -4px 0; }
     .tr { display: flex; align-items: center; gap: 6px; }
     .tr i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
     .tr span { color: var(--secondary-text-color); flex: 1; }
     .tr b { font-weight: 600; }
-  `;
+  `];
 }
 
 /** Punkt einer Serie nahe t — Toleranz halber Punktabstand (Balken/Linien liegen leicht versetzt). */
