@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { ForecastController } from "../data/forecast";
 import { fetchStatistics } from "../data/statistics";
 import { cardStyles, head } from "../components/styles";
+import { renderSky, skyStyles } from "../components/sky";
 import { renderTiles, tileStyles } from "../components/tiles";
 import type { Metric } from "../components/day-detail";
 import type { ForecastItem, HomeAssistant, StatResult, WetterConfig } from "../types";
@@ -121,6 +122,7 @@ export class WetterApp extends LitElement {
     return html`
       <div class="app ${this._wide ? "wide" : ""} ${this.hass.themes?.darkMode ? "dark" : ""} ${this._config.layout === "page" ? "page" : ""}"
         style="--wa-tint:${tint(w.state, night)}">
+        ${renderSky(w.state, this._config.animations !== false)}
         <header>
           ${this._config.name ? html`<div class="place">${this._config.name}</div>` : nothing}
           <div class="now">${temp(nowTemp)}</div>
@@ -205,7 +207,7 @@ export class WetterApp extends LitElement {
             <div class="wd">${weekday(new Date(d.datetime))}</div>
             <div class="ic">
               ${weatherIcon(d.condition)}
-              <span class="p">${(d.precipitation_probability ?? 0) >= 20 ? `${Math.round(d.precipitation_probability!)} %` : ""}</span>
+              ${(d.precipitation_probability ?? 0) >= 20 ? html`<span class="p">${Math.round(d.precipitation_probability!)} %</span>` : nothing}
             </div>
             <div class="lo">${temp(l)}</div>
             <div class="bar">
@@ -223,6 +225,7 @@ export class WetterApp extends LitElement {
   static styles = [
     cardStyles,
     tileStyles,
+    skyStyles,
     css`
       :host { display: block; }
       /* Dezenter Wetter-Farbton oben, läuft in den Theme-Hintergrund aus */
@@ -231,7 +234,10 @@ export class WetterApp extends LitElement {
         border-radius: var(--ha-card-border-radius, 12px);
         background: linear-gradient(180deg, var(--wa-tint) 0, transparent 520px), var(--primary-background-color, #111);
       }
-      .app > * { width: 100%; max-width: 1200px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+      .app { position: relative; --wa-drop: rgba(40, 70, 110, 0.3); --wa-flake: rgba(90, 110, 140, 0.55); }
+      .app.dark { --wa-drop: rgba(255, 255, 255, 0.3); --wa-flake: rgba(255, 255, 255, 0.75); }
+      .app > header, .app > nav, .app > main { position: relative; z-index: 1; }
+      .app > :not(.sky) { width: 100%; max-width: 1200px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
       /* Ganzseiten-Modus (Panel-Ansicht): ganze Fläche, keine Rundung */
       /* Panel-Ansicht setzt --ha-card-border-radius: 0 → innere Karten bekommen den HA-Standardradius */
       .app.page {
@@ -286,6 +292,7 @@ export class WetterApp extends LitElement {
       .day:hover, .hr:hover { background: rgba(127, 127, 127, 0.08); }
       .wd { font-size: 15px; font-weight: 500; }
       /* feste Höhe → alle Tageszeilen gleich hoch, egal ob Regen-% darunter steht */
+      /* feste Höhe → gleich hohe Zeilen; ohne % sitzt das Icon mittig */
       .ic { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 42px; }
       .ic .wicon { width: 28px; height: 28px; }
       .ic .p { font-size: 11px; line-height: 13px; height: 13px; color: var(--wa-rain); font-weight: 500; }

@@ -80,6 +80,12 @@ export class WetterChart extends LitElement {
   private _w = 0;
   private _hover?: number;
   private _ro?: ResizeObserver;
+  // Touch: erst nach der ersten Bewegung entscheiden — waagrecht/langes Drücken = Werte ansehen, sonst normal scrollen
+  private _touch?: { x: number; y: number; mode: "?" | "scrub" | "scroll"; timer?: number };
+  private _hideTimer?: number;
+  private _onTouchStart = (e: TouchEvent) => this.touchStart(e);
+  private _onTouchMove = (e: TouchEvent) => this.touchMove(e);
+  private _onTouchEnd = () => this.touchEnd();
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -88,11 +94,22 @@ export class WetterChart extends LitElement {
       if (w && w !== this._w) this._w = w;
     });
     this._ro.observe(this);
+    this.addEventListener("touchstart", this._onTouchStart, { passive: true });
+    // nicht passiv, sonst lässt sich das Scrollen beim Werte-Ansehen nicht unterdrücken
+    this.addEventListener("touchmove", this._onTouchMove, { passive: false });
+    this.addEventListener("touchend", this._onTouchEnd);
+    this.addEventListener("touchcancel", this._onTouchEnd);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this._ro?.disconnect();
+    this.removeEventListener("touchstart", this._onTouchStart);
+    this.removeEventListener("touchmove", this._onTouchMove);
+    this.removeEventListener("touchend", this._onTouchEnd);
+    this.removeEventListener("touchcancel", this._onTouchEnd);
+    clearTimeout(this._touch?.timer);
+    clearTimeout(this._hideTimer);
   }
 
   protected willUpdate(changed: PropertyValues): void {
@@ -135,8 +152,51 @@ export class WetterChart extends LitElement {
   // ---- Interaktion ----
 
   private onPointer(e: PointerEvent): void {
-    const rect = (e.currentTarget as SVGElement).getBoundingClientRect();
-    const px = e.clientX - rect.left;
+    if (e.pointerType === "touch") return; // Touch läuft über touchStart/-Move
+    this.hoverAt(e.clientX);
+  }
+
+  private touchStart(e: TouchEvent): void {
+    clearTimeout(this._touch?.timer);
+    clearTimeout(this._hideTimer);
+    if (e.touches.length !== 1) { this._touch = undefined; return; } // Zwei Finger: Zoom nicht stören
+    const p = e.touches[0];
+    this._touch = { x: p.clientX, y: p.clientY, mode: "?" };
+    this._touch.timer = window.setTimeout(() => {
+      if (this._touch?.mode === "?") this._touch.mode = "scrub";
+    }, 250);
+    this.hoverAt(p.clientX);
+  }
+
+  private touchMove(e: TouchEvent): void {
+    const t = this._touch;
+    if (!t || e.touches.length !== 1) return;
+    const p = e.touches[0];
+    if (t.mode === "?") {
+      const dx = Math.abs(p.clientX - t.x), dy = Math.abs(p.clientY - t.y);
+      if (dx < 8 && dy < 8) return;
+      clearTimeout(t.timer);
+      t.mode = dx > dy ? "scrub" : "scroll";
+      if (t.mode === "scroll") { this._hover = undefined; return; }
+    }
+    if (t.mode !== "scrub") return;
+    if (e.cancelable) e.preventDefault();
+    this.hoverAt(p.clientX);
+  }
+
+  private touchEnd(): void {
+    const t = this._touch;
+    if (!t) return;
+    clearTimeout(t.timer);
+    this._touch = undefined;
+    // nach dem Antippen/Wischen Werte noch kurz stehen lassen
+    if (t.mode !== "scroll") this._hideTimer = window.setTimeout(() => (this._hover = undefined), 3000);
+  }
+
+  private hoverAt(clientX: number): void {
+    const svgEl = this.renderRoot.querySelector("svg");
+    if (!svgEl) return;
+    const px = clientX - svgEl.getBoundingClientRect().left;
     const t = this.start + ((px - PAD.l) / (this._w - PAD.l - PAD.r)) * (this.end - this.start);
     // auf nächsten echten Datenpunkt einrasten
     let best: number | undefined;
@@ -279,13 +339,13 @@ export class WetterChart extends LitElement {
       <div class="wrap">
         ${tip}
         <svg width=${w} height=${this.height} @pointermove=${this.onPointer} @pointerdown=${this.onPointer}
-          @pointerleave=${() => (this._hover = undefined)}>${parts}</svg>
+          @pointerleave=${(e: PointerEvent) => { if (e.pointerType !== "touch") this._hover = undefined; }}>${parts}</svg>
       </div>
     `;
   }
 
   static styles = css`
-    :host { display: block; width: 100%; touch-action: pan-y; }
+    :host { display: block; width: 100%; touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
     .wrap { position: relative; }
     svg { display: block; overflow: visible; }
     .grid { stroke: var(--divider-color, rgba(127, 127, 127, 0.2)); stroke-width: 1; }

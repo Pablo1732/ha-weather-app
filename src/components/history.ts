@@ -51,6 +51,7 @@ export class WetterHistory extends LitElement {
   private _data?: Data;
   private _err?: string;
   private _key?: string;
+  private _dataRange?: TimeRange; // Zeitraum, zu dem _data gehört (beim Blättern bis zum Laden der alte)
   private _compare = false;
   private _extra: Extra = "pressure";
   private _bft?: number; // in der Windrose angetippte Beaufort-Stufe
@@ -99,6 +100,7 @@ export class WetterHistory extends LitElement {
         this._compare ? q(ids([s.rain_total]), p.rain, ["change"], prevStart, prevEnd) : undefined,
       ]);
       if (key !== this._key) return;
+      this._dataRange = r;
       this._data = { main, rain: rainRes, dir, prev: this._compare ? { ...prevT, ...prevR } : undefined };
     } catch (err: any) {
       if (key !== this._key) return;
@@ -109,13 +111,16 @@ export class WetterHistory extends LitElement {
 
   protected render() {
     if (!this.config) return nothing;
-    const r = this.range.range;
+    const sel = this.range.range;
     const d = this._data;
+    // bis der neue Zeitraum geladen ist, den alten (abgedunkelt) mit seinem eigenen Zeitraum zeigen
+    const r = d && this._dataRange ? this._dataRange : sel;
+    const stale = r !== sel && (r.start.getTime() !== sel.start.getTime() || r.end.getTime() !== sel.end.getTime());
     const s = this.config.sensors ?? {};
-    const canCompare = r.preset !== "day";
+    const canCompare = sel.preset !== "day";
     const tempRows = (s.temperature && d?.main[s.temperature]) || [];
     const first = tempRows.find((x) => x.mean != null)?.start;
-    const gapHint = first != null && first - r.start.getTime() > 2 * DAY
+    const gapHint = !stale && first != null && first - r.start.getTime() > 2 * DAY
       ? html`<div class="hint-inline"><ha-icon icon="mdi:information-outline"></ha-icon>Daten erst ab ${new Date(first).toLocaleDateString("de-DE")}</div>`
       : nothing;
 
@@ -129,7 +134,7 @@ export class WetterHistory extends LitElement {
       ${!d ? html`<div class="loading">Lade Historie …</div>`
         : !tempRows.length && !(s.rain_total && d.rain[s.rain_total]?.length)
           ? html`<div class="hint">Keine Daten in diesem Zeitraum.</div>`
-          : html`
+          : html`<div class="body ${stale ? "stale" : ""}">
             ${gapHint}
             ${this.renderSummary(r, d)}
             <div class="cols">
@@ -140,7 +145,7 @@ export class WetterHistory extends LitElement {
             <div class="cols">
               ${this.renderWind(r, d)}
               ${this.renderExtra(r, d)}
-            </div>`}
+            </div></div>`}
     `;
   }
 
@@ -350,6 +355,8 @@ export class WetterHistory extends LitElement {
     css`
       :host { display: flex; flex-direction: column; gap: 12px; }
       .cols, .grid { display: grid; gap: 12px; }
+      .body { display: flex; flex-direction: column; gap: 12px; transition: opacity 0.15s; }
+      .body.stale { opacity: 0.45; pointer-events: none; }
       :host([wide]) .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
       .grid { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
       .kv .big { font-size: 26px; font-weight: 600; margin-top: 4px; }

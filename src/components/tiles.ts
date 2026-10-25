@@ -31,7 +31,24 @@ function feelsTile({ hass, config }: TileData) {
     : f > t + 1 ? "Durch die Luftfeuchtigkeit fühlt es sich wärmer an."
     : "Ähnlich wie die tatsächliche Temperatur.";
   return html`<section class="card tile">${head("mdi:thermometer-lines", "Gefühlt")}
-    <div class="val">${temp(f)}</div><div class="txt">${text}</div></section>`;
+    <div class="val">${temp(f)}</div>
+    ${t != null ? html`<div class="lbl">Tatsächlich: ${temp(t)}</div>${feelsBar(f, t)}` : nothing}
+    <div class="txt">${text}</div></section>`;
+}
+
+/** Leiste wie bei Apple: Strich von gefühlt bis tatsächlich, Pille mit Differenz, Marke = tatsächlich. */
+function feelsBar(f: number, t: number) {
+  const d = Math.round(f - t);
+  // Skala so wählen, dass die Pille außen neben dem Strich Platz hat (gut 30 % auf der Gefühlt-Seite)
+  const W = Math.max(14, Math.abs(f - t) / 0.5);
+  const lo = d < 0 ? f - 0.32 * W : d > 0 ? f + 0.32 * W - W : t - W / 2;
+  const pos = (v: number) => ((v - lo) / W) * 100;
+  const color = d < 0 ? "#6ec6f0" : "#ffb74d";
+  return html`<div class="fbar">
+    ${d !== 0 ? html`<i class="fseg" style="left:${pos(Math.min(f, t))}%;width:${pos(Math.max(f, t)) - pos(Math.min(f, t))}%;background:${color}"></i>
+      <b class="fpill" style="left:${pos(f)}%;background:${color};transform:translateX(${d < 0 ? "-100%" : "0"})">${d < 0 ? "↓" : "↑"}${Math.abs(d)}°</b>` : nothing}
+    <i class="ftick" style="left:${pos(t)}%"></i>
+  </div>`;
 }
 
 function windTile({ hass, config }: TileData) {
@@ -112,6 +129,7 @@ function humidityTile({ hass, config }: TileData) {
   const dp = stateNum(hass, s.dewpoint);
   return html`<section class="card tile">${head("mdi:water-percent", "Feuchtigkeit")}
     <div class="val">${num(h, 0)} %</div>
+    <div class="hbar"><i style="width:${Math.max(0, Math.min(100, h))}%"></i></div>
     <div class="txt">${dp != null ? `Der Taupunkt liegt derzeit bei ${temp(dp)}.` : ""}</div></section>`;
 }
 
@@ -207,7 +225,7 @@ function moonSvg(k: number, waxing: boolean) {
 export const tileStyles = css`
   /* so viele Spalten wie passen (Handy 2, Tablet/PC 3–6) → keine riesigen, halbleeren Kacheln */
   .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; }
-  .tile { display: flex; flex-direction: column; min-height: 130px; }
+  .tile { display: flex; flex-direction: column; }
   .tile.wide2 { grid-column: span 2; }
   .tile .val { font-size: 28px; font-weight: 600; line-height: 1.2; margin-top: 2px; }
   .tile .lbl { font-size: 15px; font-weight: 500; }
@@ -241,6 +259,17 @@ export const tileStyles = css`
     position: absolute; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; box-sizing: border-box;
     background: var(--wa-text); border: 2px solid var(--ha-card-background, var(--card-background-color, #fff));
   }
+
+  .fbar { position: relative; height: 18px; margin-top: 10px; }
+  .fbar::before { content: ""; position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 2px; background: var(--wa-track); }
+  .fseg { position: absolute; top: 7px; height: 4px; }
+  .fpill {
+    position: absolute; top: 0; padding: 0 7px; border-radius: 9px;
+    font-size: 12px; line-height: 18px; font-weight: 600; color: #10202c; white-space: nowrap;
+  }
+  .ftick { position: absolute; top: 2px; width: 3px; height: 14px; margin-left: -1.5px; border-radius: 2px; background: var(--wa-text); }
+  .hbar { height: 5px; border-radius: 3px; margin-top: 10px; background: var(--wa-track); overflow: hidden; }
+  .hbar i { display: block; height: 100%; border-radius: 3px; background: var(--wa-rain); }
 
   .sunarc { position: relative; height: 56px; margin-top: 6px; }
   .sunarc svg { width: 100%; height: 100%; display: block; }
