@@ -373,7 +373,9 @@ export class WetterHistory extends LitElement {
       .cmp button.on, .chips.small button.on {
         border-color: transparent; color: var(--wa-accent); font-weight: 500; background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.18);
       }
-      .chips.small { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; }
+      /* oben so viel Luft wie unten bis zum Diagramm (dessen Innenabstand oben) */
+      .chips.small { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 2px; }
+      .chips.small button { line-height: 18px; }
       .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12px; color: var(--wa-text2); margin-top: 6px; }
       .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: -6px; }
       .legend i.ln { height: 3px; }

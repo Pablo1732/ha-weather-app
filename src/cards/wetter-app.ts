@@ -2,7 +2,6 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { ForecastController } from "../data/forecast";
 import { fetchStatistics } from "../data/statistics";
 import { cardStyles, head } from "../components/styles";
-import { renderSky, skyStyles } from "../components/sky";
 import { renderTiles, tileStyles } from "../components/tiles";
 import type { Metric } from "../components/day-detail";
 import type { ForecastItem, HomeAssistant, StatResult, WetterConfig } from "../types";
@@ -122,7 +121,7 @@ export class WetterApp extends LitElement {
     return html`
       <div class="app ${this._wide ? "wide" : ""} ${this.hass.themes?.darkMode ? "dark" : ""} ${this._config.layout === "page" ? "page" : ""}"
         style="--wa-tint:${tint(w.state, night)}">
-        ${renderSky(w.state, this._config.animations !== false)}
+        ${this._config.animations !== false ? html`<wetter-app-sky class="sky" .condition=${w.state} .night=${night}></wetter-app-sky>` : nothing}
         <header>
           ${this._config.name ? html`<div class="place">${this._config.name}</div>` : nothing}
           <div class="now">${temp(nowTemp)}</div>
@@ -225,7 +224,6 @@ export class WetterApp extends LitElement {
   static styles = [
     cardStyles,
     tileStyles,
-    skyStyles,
     css`
       :host { display: block; }
       /* Dezenter Wetter-Farbton oben, läuft in den Theme-Hintergrund aus */
@@ -234,8 +232,8 @@ export class WetterApp extends LitElement {
         border-radius: var(--ha-card-border-radius, 12px);
         background: linear-gradient(180deg, var(--wa-tint) 0, transparent 520px), var(--primary-background-color, #111);
       }
-      .app { position: relative; --wa-drop: rgba(40, 70, 110, 0.3); --wa-flake: rgba(90, 110, 140, 0.55); }
-      .app.dark { --wa-drop: rgba(255, 255, 255, 0.3); --wa-flake: rgba(255, 255, 255, 0.75); }
+      .app { position: relative; --wa-drop: rgba(40, 70, 110, 0.3); --wa-flake: rgba(90, 110, 140, 0.55); --wa-cloudbg: rgba(120, 135, 155, 0.22); }
+      .app.dark { --wa-drop: rgba(255, 255, 255, 0.3); --wa-flake: rgba(255, 255, 255, 0.75); --wa-cloudbg: rgba(255, 255, 255, 0.11); }
       .app > header, .app > nav, .app > main { position: relative; z-index: 1; }
       .app > :not(.sky) { width: 100%; max-width: 1200px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
       /* Ganzseiten-Modus (Panel-Ansicht): ganze Fläche, keine Rundung */

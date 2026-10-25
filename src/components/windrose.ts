@@ -95,7 +95,11 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
     nowPos = ((ni + Math.min(1, (now.speed! - b.min) / (hi - b.min))) / shown.length) * 100;
   }
   const sel = o.selected != null ? BFT[o.selected] : undefined;
+  // Maus: Hover zeigt Details; Touch: Antippen schaltet um
   const pick = (i: number) => o.onSelect?.(o.selected === i ? undefined : i);
+  const enter = (e: PointerEvent, i: number) => { if (e.pointerType === "mouse") o.onSelect?.(i); };
+  const leave = (e: PointerEvent) => { if (e.pointerType === "mouse") o.onSelect?.(undefined); };
+  const si = shown.findIndex((b) => b.i === o.selected);
   const range = (b: Bft) => (b.min === 0 ? "unter 1" : Number.isFinite(b.max) ? `${b.min}–${b.max - 1}` : `ab ${b.min}`);
 
   return html`
@@ -114,12 +118,16 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
       </svg>
       <div class="bftbar">
         ${nowPos != null ? html`<span class="nowsp" style="left:${nowPos}%" title="Aktuell: ${num(now.speed, 1)} km/h"></span>` : ""}
+        ${sel && si >= 0 ? html`<div class="btip" style="left:${((si + 0.5) / shown.length) * 100}%">
+          <div class="tr"><i style="background:${sel.color}"></i><b>Beaufort ${sel.label}</b></div>
+          <div class="tr"><span>${sel.name}</span></div>
+          <div class="tr"><span>Wind</span><b>${range(sel)} km/h</b></div>
+          <div class="tr"><span>Anteil</span><b>${num(pct(totals[o.selected!]), 1)} %</b></div>
+        </div>` : ""}
         <div class="segs">${shown.map((b) => html`<button style="background:${b.color};color:${b.text}" class=${o.selected === b.i ? "on" : ""}
-          @click=${() => pick(b.i)}>${b.share >= 0.5 ? `${Math.round(b.share)}%` : ""}</button>`)}</div>
-        <div class="nums">${shown.map((b) => html`<span @click=${() => pick(b.i)}>${b.label}</span>`)}</div>
-        <div class="bl">${sel
-          ? html`<b>Beaufort ${sel.label}</b> · ${sel.name} · ${range(sel)} km/h · ${num(pct(totals[o.selected!]), 1)} % der Zeit`
-          : "Beaufort — Stufe antippen für km/h"}</div>
+          @click=${() => pick(b.i)} @pointerenter=${(e: PointerEvent) => enter(e, b.i)} @pointerleave=${leave}>${b.share >= 0.5 ? `${Math.round(b.share)}%` : ""}</button>`)}</div>
+        <div class="nums">${shown.map((b) => html`<span @click=${() => pick(b.i)} @pointerenter=${(e: PointerEvent) => enter(e, b.i)} @pointerleave=${leave}>${b.label}</span>`)}</div>
+        <div class="bl">Beaufort</div>
       </div>
     </div>`;
 }
@@ -144,7 +152,16 @@ export const windroseStyles = css`
   .nums { display: flex; font-size: 11px; color: var(--wa-text2); margin-top: 2px; }
   .nums span { flex: 1; text-align: center; cursor: pointer; }
   .bl { text-align: center; font-size: 12px; color: var(--wa-text2); margin-top: 2px; }
-  .bl b { color: var(--wa-text); font-weight: 500; }
+  .btip {
+    position: absolute; bottom: calc(100% - 6px); transform: translateX(-50%); pointer-events: none; z-index: 1; min-width: 130px;
+    background: var(--card-background-color, #222); color: var(--primary-text-color);
+    border: 1px solid var(--divider-color); border-radius: 8px; padding: 6px 8px; font-size: 12px; line-height: 1.5;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); white-space: nowrap;
+  }
+  .btip .tr { display: flex; align-items: center; gap: 6px; }
+  .btip .tr i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .btip .tr span { color: var(--secondary-text-color); flex: 1; }
+  .btip .tr b { font-weight: 600; }
   .nowsp { position: absolute; top: 0; width: 0; height: 0; margin-left: -6px;
     border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 9px solid #e53935; }
 `;
