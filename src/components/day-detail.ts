@@ -278,6 +278,8 @@ export class WetterDayDetail extends LitElement {
         /* PC: Hintergrund deutlich abdunkeln und weichzeichnen, damit das Popup klar im Fokus steht */
         .backdrop { background: rgba(0, 0, 0, 0.6); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
         .sheet { max-height: 90vh; border-radius: var(--ha-border-radius-lg, 12px); }
+        /* niedrige Bildschirme (Echo Show 960×480): fast volle Höhe nutzen */
+        @media (max-height: 600px) { :host { padding: 8px 24px; } .sheet { max-height: 100%; } }
       }
       .top { display: flex; align-items: center; justify-content: space-between; }
       .ttl { font-size: 18px; font-weight: 500; }

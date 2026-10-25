@@ -329,6 +329,22 @@ export class WetterApp extends LitElement {
       .cond { font-size: 20px; font-weight: 500; }
       .hl { font-size: 17px; font-weight: 500; white-space: pre; }
 
+      /* Breit, aber niedrig (Echo Show 960×480, Handy quer, kleine Tablets): Kopf kompakt in einer Zeile
+         statt halbe Bildschirmhöhe — Temperatur links, Ort/Wetter/H-T rechts daneben */
+      @media (max-height: 600px) and (min-width: 700px) {
+        header {
+          display: grid; grid-template-columns: auto auto; justify-content: center; align-items: center;
+          column-gap: 18px; text-align: left; padding: 0 0 6px;
+        }
+        header > :not(.now) { grid-column: 2; }
+        .now { grid-column: 1; grid-row: 1 / span 3; font-size: 64px; margin: 0; }
+        .place { font-size: 20px; }
+        .cond { font-size: 16px; }
+        .hl { font-size: 14px; }
+        .app.page { padding-top: 10px; }
+        .tabs button { padding: 8px; }
+      }
+
       /* Tabs im Stil der HA-Oberfläche: Text + Unterstrich in Primärfarbe */
       .tabs { display: flex; border-bottom: 1px solid var(--wa-divider); }
       .tabs button {
