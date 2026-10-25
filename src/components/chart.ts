@@ -255,7 +255,8 @@ export class WetterChart extends LitElement {
       parts.push(svg`<text x=${end ? x - 3 : x + 3} y=${this.height - 6} class="xlab" style=${end ? "text-anchor:end" : ""}>${tk.label}</text>`);
     }
 
-    // Serien
+    // Serien — auf die Zeichenfläche begrenzt, sonst ragen Linien/Flächen in die Achsenbeschriftung
+    const sp: unknown[] = [];
     this.series.forEach((s, i) => {
       const sc = s.axis === "right" && R ? R : L;
       const pts = s.points.filter((p) => p.v != null).sort((a, b) => a.t - b.t);
@@ -271,7 +272,7 @@ export class WetterChart extends LitElement {
           const yb = s.type === "range" ? sc.y(p.v2 ?? p.v!) : y0;
           const h = Math.max(s.type === "range" ? pxw : 0.5, Math.abs(yb - ya));
           const top = Math.min(ya, yb) - (h - Math.abs(yb - ya)) / 2;
-          parts.push(svg`<rect x=${xc - pxw / 2} y=${top} width=${pxw} height=${h} rx=${s.type === "range" ? pxw / 2 : 2} style="fill:${s.color}"/>`);
+          sp.push(svg`<rect x=${xc - pxw / 2} y=${top} width=${pxw} height=${h} rx=${s.type === "range" ? pxw / 2 : 2} style="fill:${s.color}"/>`);
         }
         return;
       }
@@ -279,14 +280,14 @@ export class WetterChart extends LitElement {
         const top = pts.filter((p) => p.v2 != null).map((p) => [this.x(p.t), sc.y(p.v2!)] as const);
         const low = pts.map((p) => [this.x(p.t), sc.y(p.v!)] as const).reverse();
         if (top.length) {
-          parts.push(svg`<path d=${smooth(top) + " L" + smooth(low).slice(1) + "Z"} style="fill:${s.color};fill-opacity:0.28"/>`);
+          sp.push(svg`<path d=${smooth(top) + " L" + smooth(low).slice(1) + "Z"} style="fill:${s.color};fill-opacity:0.28"/>`);
         }
         return;
       }
       const xy = pts.map((p) => [this.x(p.t), sc.y(p.v!)] as const);
       if (s.type === "area") {
         const id = `g${i}`;
-        parts.push(svg`
+        sp.push(svg`
           <defs><linearGradient id=${id} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" style="stop-color:${s.color};stop-opacity:0.45"/>
             <stop offset="1" style="stop-color:${s.color};stop-opacity:0.04"/>
@@ -297,13 +298,14 @@ export class WetterChart extends LitElement {
         const cut = pts.findIndex((p) => p.t >= s.dashUntil!);
         const a = cut < 0 ? xy : xy.slice(0, cut + 1);
         const b = cut < 0 ? [] : xy.slice(cut);
-        parts.push(svg`<path d=${smooth(a)} class="ln" style="stroke:${s.color}" stroke-dasharray="5 5"/>`);
-        if (b.length > 1) parts.push(svg`<path d=${smooth(b)} class="ln" style="stroke:${s.color}"/>`);
+        sp.push(svg`<path d=${smooth(a)} class="ln" style="stroke:${s.color}" stroke-dasharray="5 5"/>`);
+        if (b.length > 1) sp.push(svg`<path d=${smooth(b)} class="ln" style="stroke:${s.color}"/>`);
       } else {
-        parts.push(svg`<path d=${smooth(xy)} class="ln" style="stroke:${s.color}" />`);
+        sp.push(svg`<path d=${smooth(xy)} class="ln" style="stroke:${s.color}" />`);
       }
     });
 
+    const gridCount = parts.length;
     // Markierungen (z. B. H/T)
     for (const m of this.markers) {
       const x = this.x(m.t), y = L.y(m.v);
@@ -347,7 +349,9 @@ export class WetterChart extends LitElement {
       <div class="wrap">
         ${tip}
         <svg width=${w} height=${this.height} @pointermove=${this.onPointer} @pointerdown=${this.onPointer}
-          @pointerleave=${(e: PointerEvent) => { if (e.pointerType !== "touch") this._hover = undefined; }}>${parts}${rightLabels}</svg>
+          @pointerleave=${(e: PointerEvent) => { if (e.pointerType !== "touch") this._hover = undefined; }}>
+          <defs><clipPath id="plot"><rect x=${PAD.l - 1} y="0" width=${Math.max(0, w - PAD.l - PAD.r + 2)} height=${bottom + 1}/></clipPath></defs>
+          ${parts.slice(0, gridCount)}<g clip-path="url(#plot)">${sp}</g>${parts.slice(gridCount)}${rightLabels}</svg>
       </div>
     `;
   }

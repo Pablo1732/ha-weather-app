@@ -128,7 +128,7 @@ export class WetterHistory extends LitElement {
     const tempRows = (s.temperature && d?.main[s.temperature]) || [];
     const first = tempRows.find((x) => x.mean != null)?.start;
     const gapHint = !stale && first != null && first - r.start.getTime() > 2 * DAY
-      ? html`<div class="hint-inline"><ha-icon icon="mdi:information-outline"></ha-icon>Daten erst ab ${new Date(first).toLocaleDateString("de-DE")}</div>`
+      ? html`<div class="hint-inline"><span><ha-icon icon="mdi:information-outline"></ha-icon>Daten erst ab <b>${new Date(first).toLocaleDateString("de-DE")}</b> — davor bleibt der Zeitraum leer</span></div>`
       : nothing;
 
     return html`
@@ -157,7 +157,9 @@ export class WetterHistory extends LitElement {
   // ---------- Helfer ----------
 
   private rows(res: StatResult | undefined, id: string | undefined, r: TimeRange): StatValue[] {
-    const rows = (id && res?.[id]) || [];
+    // nur Abschnitte innerhalb des Zeitraums — HA liefert teils den angrenzenden mit (sonst z. B. ein 13. Monat rechts außerhalb)
+    const s0 = r.start.getTime(), e0 = r.end.getTime();
+    const rows = ((id && res?.[id]) || []).filter((x) => x.start < e0 && x.end > s0);
     return r.preset === "year" ? byMonth(rows) : rows;
   }
 
@@ -258,9 +260,11 @@ export class WetterHistory extends LitElement {
       // laufender Abschnitt endet in der Zukunft → Punkt aufs Zeitraum-Ende begrenzen
       return list.map((x) => ({ t: Math.min(x.end, r.end.getTime()), v: (acc += x.change ?? 0) }));
     };
+    // Summe erst ab dem ersten Messwert, sonst läuft die Linie ab Zeitraum-Beginn durch die Datenlücke
+    const sumRows = rows.slice(Math.max(0, rows.findIndex((x) => x.change != null)));
     const series: ChartSeries[] = [
       { type: "bar", points: rows.map((x) => ({ t: x.start, t2: x.end, v: x.change ?? 0 })), color: "var(--wa-rain)", label: "Menge", unit: " l/m²", digits: 1 },
-      { type: "line", axis: "right", points: [{ t: r.start.getTime(), v: 0 }, ...cumul(rows)], color: "var(--wa-prob, #90caf9)", label: "Summe", unit: " l/m²", digits: 1 },
+      { type: "line", axis: "right", points: sumRows.length ? [{ t: Math.max(sumRows[0].start, r.start.getTime()), v: 0 }, ...cumul(sumRows)] : [], color: "var(--wa-prob, #90caf9)", label: "Summe", unit: " l/m²", digits: 1 },
     ];
     return html`<section class="card">${head("mdi:weather-pouring", "Niederschlag")}
       ${this.chart(r, series, { yMin: 0, period: p.rain })}
@@ -324,13 +328,17 @@ export class WetterHistory extends LitElement {
     const t = this.rows(d.main, s.temperature, r);
     const rn = this.rows(d.rain, s.rain_total, r);
     // laufendes Jahr: nur bis zum aktuellen Monat, sonst stünden im Januar elf leere Zeilen
-    const months = [...Array(12)].map((_, m) => new Date(r.start.getFullYear(), m, 1).getTime()).filter((m) => m <= Date.now());
     const at = (rows: StatValue[], m: number) => rows.find((x) => x.start === m);
+    // nur von den ersten Daten bis heute — keine Reihe leerer Zeilen vor Aufzeichnungsbeginn oder in der Zukunft
+    const all = [...Array(12)].map((_, m) => new Date(r.start.getFullYear(), m, 1).getTime()).filter((m) => m <= Date.now());
+    const firstData = all.findIndex((m) => at(t, m) || at(rn, m));
+    const months = firstData < 0 ? all : all.slice(firstData);
     const maxRain = Math.max(1, ...rn.map((x) => x.change ?? 0));
     return html`<section class="card">${head("mdi:table", `Monate ${r.start.getFullYear()}`)}
       <table class="months">
         <thead><tr><th></th><th>Ø</th><th>Min</th><th>Max</th><th class="rc">Niederschlag</th></tr></thead>
-        <tbody>${months.map((m, i) => {
+        <tbody>${months.map((m) => {
+          const i = new Date(m).getMonth();
           const tm = at(t, m), rm = at(rn, m);
           if (!tm && !rm) return html`<tr class="empty"><td>${MONTHS[i]}</td><td colspan="4">–</td></tr>`;
           return html`<tr>
@@ -370,8 +378,13 @@ export class WetterHistory extends LitElement {
       /* oben so viel Luft wie unten bis zum Diagramm (dessen Innenabstand oben) */
       .chips.small { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 2px; }
       .chips.small button { line-height: 18px; }
-      .hint-inline { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--wa-text2); justify-content: center; }
-      .hint-inline ha-icon { --mdc-icon-size: 16px; }
+      /* auffällig wie ein Hinweis-Banner, aber in Theme-Farben (Orange = HA-Warnfarbe) */
+      .hint-inline { display: flex; justify-content: center; }
+      .hint-inline span {
+        display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--wa-text); padding: 8px 14px; border-radius: 12px;
+        background: rgba(255, 152, 0, 0.16); border: 1px solid rgba(255, 152, 0, 0.45);
+      }
+      .hint-inline ha-icon { --mdc-icon-size: 18px; color: var(--warning-color, #ff9800); flex: none; }
       .months { width: 100%; border-collapse: collapse; font-size: 14px; }
       .months th { font-size: 12px; font-weight: 500; color: var(--wa-text2); text-align: right; padding: 4px; }
       .months td { padding: 6px 4px; text-align: right; border-top: 1px solid var(--wa-divider); white-space: nowrap; }

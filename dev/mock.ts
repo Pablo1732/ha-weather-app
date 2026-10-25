@@ -61,6 +61,7 @@ const daily: ForecastItem[] = [
   return { datetime: d.toISOString(), temperature: t as number, templow: l as number, condition: c as string, precipitation_probability: p as number };
 });
 
+const DATA_FROM = new Date(2025, 10, 1).getTime();
 const STEP: Record<string, number> = { "5minute": 300_000, hour: 3_600_000, day: 86_400_000, week: 604_800_000 };
 
 function stats(msg: any): Record<string, StatValue[]> {
@@ -70,6 +71,8 @@ function stats(msg: any): Record<string, StatValue[]> {
   for (const id of msg.statistic_ids as string[]) {
     const rows: StatValue[] = [];
     let t = new Date(start);
+    // wie die echte Station: Daten erst ab 1.11.2025
+    if (t.getTime() < DATA_FROM) t = new Date(DATA_FROM);
     while (t < end) {
       const next = msg.period === "month" ? new Date(t.getFullYear(), t.getMonth() + 1, 1) : new Date(t.getTime() + STEP[msg.period]);
       const doy = (t.getMonth() * 30 + t.getDate()) / 365;
