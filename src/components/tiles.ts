@@ -279,6 +279,7 @@ export const tileStyles = css`
   .sundot.down { background: var(--wa-text2); }
 
   .moon { display: flex; align-items: center; gap: 12px; flex: 1; }
-  .moon .moonimg { width: 92px; height: 92px; flex: none; }
+  /* NASA-Foto ist für dunklen Grund belichtet → im hellen Theme aufhellen */
+  .moon .moonimg { width: 92px; height: 92px; flex: none; filter: var(--wa-moonimg, none); }
   .moon > div { flex: 1; min-width: 0; }
 `;
