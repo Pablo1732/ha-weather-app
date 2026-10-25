@@ -224,7 +224,9 @@ function moonSvg(k: number, waxing: boolean) {
 
 export const tileStyles = css`
   /* so viele Spalten wie passen (Handy 2, Tablet/PC 3–6) → keine riesigen, halbleeren Kacheln */
+  /* min(…, 50 %): auch auf sehr schmalen Handys immer 2 Spalten — breite Kacheln (span 2) sprengen sonst das Raster */
   .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; }
+  .tiles { grid-template-columns: repeat(auto-fill, minmax(min(165px, calc(50% - 6px)), 1fr)); } /* alte Browser ohne min(): Zeile davor */
   .tile { display: flex; flex-direction: column; }
   .tile.wide2 { grid-column: span 2; }
   .tile .val { font-size: 28px; font-weight: 600; line-height: 1.2; margin-top: 2px; }

@@ -27,6 +27,14 @@ window._audit = function (label) {
       const card = e.closest(".card");
       if (card) { const c = card.getBoundingClientRect(); if (r.right > c.right + 1 || r.left < c.left - 1) out.push(`OUTCARD ${desc(e)}`); }
     }
+    // Flex-Container mit losem Text neben Elementen: jeder Textteil wird eigenes Flex-Element → bricht spaltenweise um
+    if (/flex/.test(cs.display) && e.children.length && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) {
+      const kids = [...e.children].filter((c) => getComputedStyle(c).display !== "none");
+      const lines = new Set(kids.map((c) => Math.round(c.getBoundingClientRect().top)));
+      out.push(`FLEXTEXT${lines.size > 1 || kids.some((c) => c.getClientRects().length > 1) ? "-WRAPPED" : ""} ${desc(e)}`);
+    }
+    // Text, der mehrzeilig umbricht, obwohl das Element sehr schmal ist (Wörter einzeln untereinander)
+    if (e.children.length === 0 && (e.textContent || "").trim().includes(" ") && r.width < 70 && r.height > parseFloat(cs.lineHeight || "0") * 1.8 && !e.closest("svg")) out.push(`NARROWWRAP ${desc(e)} w=${Math.round(r.width)}`);
     if (e.localName === "text" && e.ownerSVGElement) {
       const s = e.ownerSVGElement.getBoundingClientRect();
       if (r.right > s.right + 2 || r.left < s.left - 2 || r.top < s.top - 2 || r.bottom > s.bottom + 2) out.push(`SVGTEXT-OUT ${desc(e)}`);

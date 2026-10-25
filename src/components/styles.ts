@@ -41,7 +41,9 @@ export const cardStyles = css`
     font-size: 14px; font-weight: 500; color: var(--wa-text2);
     padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--wa-divider);
   }
-  .head ha-icon { --mdc-icon-size: 18px; color: var(--state-icon-color, var(--wa-text2)); }
+  .head ha-icon { --mdc-icon-size: 18px; color: var(--state-icon-color, var(--wa-text2)); flex: none; }
+  /* lange Titel in schmalen Kacheln (z. B. „Sonnenuntergang“) kürzen statt über den Rand laufen */
+  .head span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .wicon { display: block; }
   .wicon .c1 { fill: var(--wa-cloud); }

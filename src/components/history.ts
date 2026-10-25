@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, svg } from "lit";
 import { isPreset, type TimeRange } from "../data/range";
 import { RangeController } from "../data/range-sync";
 import { fetchStatistics } from "../data/statistics";
@@ -20,6 +20,8 @@ const EXTRAS: { id: Extra; label: string; unit: string; digits: number; color: s
   { id: "uv", label: "UV", unit: "", digits: 1, color: "#ab47bc" },
 ];
 
+// mdi:information-outline direkt als SVG — ha-icon blieb im Banner teils leer
+const INFO_ICON = svg`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11,9H13V7H11M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11V17Z"/></svg>`;
 const MONTHS = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
 const MONTHS_LONG = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 const WD = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
@@ -128,7 +130,7 @@ export class WetterHistory extends LitElement {
     const tempRows = (s.temperature && d?.main[s.temperature]) || [];
     const first = tempRows.find((x) => x.mean != null)?.start;
     const gapHint = !stale && first != null && first - r.start.getTime() > 2 * DAY
-      ? html`<div class="hint-inline"><span><ha-icon icon="mdi:information-outline"></ha-icon>Daten erst ab <b>${new Date(first).toLocaleDateString("de-DE")}</b> — davor bleibt der Zeitraum leer</span></div>`
+      ? html`<div class="hint-inline"><span>${INFO_ICON}<span>Daten erst ab <b>${new Date(first).toLocaleDateString("de-DE")}</b></span></span></div>`
       : nothing;
 
     return html`
@@ -380,11 +382,11 @@ export class WetterHistory extends LitElement {
       .chips.small button { line-height: 18px; }
       /* auffällig wie ein Hinweis-Banner, aber in Theme-Farben (Orange = HA-Warnfarbe) */
       .hint-inline { display: flex; justify-content: center; }
-      .hint-inline span {
+      .hint-inline > span {
         display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--wa-text); padding: 8px 14px; border-radius: 12px;
         background: rgba(255, 152, 0, 0.16); border: 1px solid rgba(255, 152, 0, 0.45);
       }
-      .hint-inline ha-icon { --mdc-icon-size: 18px; color: var(--warning-color, #ff9800); flex: none; }
+      .hint-inline svg { width: 18px; height: 18px; fill: var(--warning-color, #ff9800); flex: none; }
       .months { width: 100%; border-collapse: collapse; font-size: 14px; }
       .months th { font-size: 12px; font-weight: 500; color: var(--wa-text2); text-align: right; padding: 4px; }
       .months td { padding: 6px 4px; text-align: right; border-top: 1px solid var(--wa-divider); white-space: nowrap; }
