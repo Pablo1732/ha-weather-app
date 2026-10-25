@@ -55,6 +55,7 @@ export class WetterHistory extends LitElement {
   private _compare = false;
   private _extra: Extra = "pressure";
   private _bft?: number; // in der Windrose angetippte Beaufort-Stufe
+  private _bftUp = false; // Detail nach oben öffnen (unten kein Platz)
 
   private range = new RangeController(
     this,
@@ -68,8 +69,9 @@ export class WetterHistory extends LitElement {
     return {
       main,
       rain: (r.preset === "day" ? "hour" : "day") as StatPeriod,
-      // Rose immer aus Stundenwerten — Tagesmittel verwischen die Richtung (Jahr ≈ 8 760 Werte, einmalig gecacht)
-      rose: "hour" as StatPeriod,
+      // Rose aus 5-Minuten-Werten, solange HA sie noch hat (Standard 10 Tage) — Stundenmittel glätten kurze
+      // stärkere Phasen weg. Älteres aus Stundenwerten; Tagesmittel würden die Richtung verwischen.
+      rose: (r.start.getTime() > Date.now() - 9 * DAY ? "5minute" : "hour") as StatPeriod,
     };
   }
 
@@ -298,7 +300,8 @@ export class WetterHistory extends LitElement {
       ${s.wind_direction ? renderWindrose(dirRows, speedForRose, {
         now: r.live ? { direction: stateNum(this.hass, s.wind_direction), speed: stateNum(this.hass, s.wind_speed) } : {},
         selected: this._bft,
-        onSelect: (i) => (this._bft = i),
+        up: this._bftUp,
+        onSelect: (i, up) => { this._bft = i; this._bftUp = !!up; },
       }) : nothing}
       ${this.chart(r, series, { yMin: 0, period: p.main, height: 160 })}
       <div class="legend"><i class="ln" style="background:#81c784"></i>Durchschnitt<i class="ln" style="background:#ffb74d"></i>stärkste Böe</div>

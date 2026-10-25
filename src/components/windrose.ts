@@ -23,7 +23,7 @@ const DIRS = ["N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO", "S", "SSW", "SW"
 const bftOf = (sp: number) => BFT.findIndex((b) => sp < b.max);
 
 export interface WindNow { direction?: number; speed?: number }
-export interface RoseOpts { now?: WindNow; selected?: number; onSelect?: (i: number | undefined) => void }
+export interface RoseOpts { now?: WindNow; selected?: number; up?: boolean; onSelect?: (i: number | undefined, up?: boolean) => void }
 
 export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[] = [], o: RoseOpts = {}) {
   const now = o.now ?? {};
@@ -87,17 +87,24 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
 
   // Beaufort-Leiste: nur Stufen, die im Zeitraum vorkamen (+ die aktuelle)
   const nowCls = now.speed != null ? bftOf(now.speed) : -1;
-  const shown = BFT.map((b, i) => ({ ...b, i, share: pct(totals[i]) })).filter((b) => totals[b.i] > 0 || b.i === nowCls);
+  // Breite nach Anteil, mit Mindestbreite, damit seltene Stufen lesbar und antippbar bleiben
+  const shown = BFT.map((b, i) => ({ ...b, i, share: pct(totals[i]), w: Math.max(pct(totals[i]), 9) }))
+    .filter((b) => totals[b.i] > 0 || b.i === nowCls);
+  const wSum = shown.reduce((a, b) => a + b.w, 0);
+  const startOf = (k: number) => shown.slice(0, k).reduce((a, b) => a + b.w, 0) / wSum * 100;
   let nowPos: number | undefined;
   const ni = shown.findIndex((b) => b.i === nowCls);
   if (ni >= 0) {
     const b = shown[ni], hi = Number.isFinite(b.max) ? b.max : b.min + 20;
-    nowPos = ((ni + Math.min(1, (now.speed! - b.min) / (hi - b.min))) / shown.length) * 100;
+    nowPos = startOf(ni) + Math.min(1, (now.speed! - b.min) / (hi - b.min)) * (b.w / wSum) * 100;
   }
+  const label = (v: number) => (v >= 1 ? `${Math.round(v)}%` : `${num(v, 1)}%`);
   const sel = o.selected != null ? BFT[o.selected] : undefined;
   // Maus: Hover zeigt Details; Touch: Antippen schaltet um
-  const pick = (i: number) => o.onSelect?.(o.selected === i ? undefined : i);
-  const enter = (e: PointerEvent, i: number) => { if (e.pointerType === "mouse") o.onSelect?.(i); };
+  // Detail nach unten öffnen, außer der Bildschirm ist unterhalb zu knapp
+  const up = (e: Event) => window.innerHeight - (e.currentTarget as HTMLElement).getBoundingClientRect().bottom < 150;
+  const pick = (e: Event, i: number) => o.onSelect?.(o.selected === i ? undefined : i, up(e));
+  const enter = (e: PointerEvent, i: number) => { if (e.pointerType === "mouse") o.onSelect?.(i, up(e)); };
   const leave = (e: PointerEvent) => { if (e.pointerType === "mouse") o.onSelect?.(undefined); };
   const si = shown.findIndex((b) => b.i === o.selected);
   const range = (b: Bft) => (b.min === 0 ? "unter 1" : Number.isFinite(b.max) ? `${b.min}–${b.max - 1}` : `ab ${b.min}`);
@@ -118,15 +125,15 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
       </svg>
       <div class="bftbar">
         ${nowPos != null ? html`<span class="nowsp" style="left:${nowPos}%" title="Aktuell: ${num(now.speed, 1)} km/h"></span>` : ""}
-        ${sel && si >= 0 ? html`<div class="btip" style="left:${((si + 0.5) / shown.length) * 100}%">
+        ${sel && si >= 0 ? html`<div class="btip ${o.up ? "up" : ""}" style="left:${startOf(si) + (shown[si].w / wSum) * 50}%">
           <div class="tr"><i style="background:${sel.color}"></i><b>Beaufort ${sel.label}</b></div>
           <div class="tr"><span>${sel.name}</span></div>
           <div class="tr"><span>Wind</span><b>${range(sel)} km/h</b></div>
           <div class="tr"><span>Anteil</span><b>${num(pct(totals[o.selected!]), 1)} %</b></div>
         </div>` : ""}
-        <div class="segs">${shown.map((b) => html`<button style="background:${b.color};color:${b.text}" class=${o.selected === b.i ? "on" : ""}
-          @click=${() => pick(b.i)} @pointerenter=${(e: PointerEvent) => enter(e, b.i)} @pointerleave=${leave}>${b.share >= 0.5 ? `${Math.round(b.share)}%` : ""}</button>`)}</div>
-        <div class="nums">${shown.map((b) => html`<span @click=${() => pick(b.i)} @pointerenter=${(e: PointerEvent) => enter(e, b.i)} @pointerleave=${leave}>${b.label}</span>`)}</div>
+        <div class="segs">${shown.map((b) => html`<button style="flex:${b.w} 1 0;background:${b.color};color:${b.text}" class=${o.selected === b.i ? "on" : ""}
+          @click=${(e: Event) => pick(e, b.i)} @pointerenter=${(e: PointerEvent) => enter(e, b.i)} @pointerleave=${leave}>${label(b.share)}</button>`)}</div>
+        <div class="nums">${shown.map((b) => html`<span style="flex:${b.w} 1 0" @click=${(e: Event) => pick(e, b.i)} @pointerenter=${(e: PointerEvent) => enter(e, b.i)} @pointerleave=${leave}>${b.label}</span>`)}</div>
         <div class="bl">Beaufort</div>
       </div>
     </div>`;
@@ -147,17 +154,18 @@ export const windroseStyles = css`
   .now { fill: #e53935; }
   .bftbar { position: relative; width: 100%; max-width: 360px; padding-top: 10px; }
   .segs { display: flex; height: 20px; border-radius: 4px; overflow: hidden; }
-  .segs button { flex: 1; border: 0; padding: 0; font: inherit; font-size: 10px; font-weight: 600; line-height: 20px; cursor: pointer; }
+  .segs button { min-width: 0; overflow: hidden; border: 0; padding: 0; font: inherit; font-size: 10px; font-weight: 600; line-height: 20px; cursor: pointer; }
   .segs button.on { box-shadow: inset 0 0 0 2px var(--wa-text); }
   .nums { display: flex; font-size: 11px; color: var(--wa-text2); margin-top: 2px; }
-  .nums span { flex: 1; text-align: center; cursor: pointer; }
+  .nums span { min-width: 0; text-align: center; cursor: pointer; }
   .bl { text-align: center; font-size: 12px; color: var(--wa-text2); margin-top: 2px; }
   .btip {
-    position: absolute; bottom: calc(100% - 6px); transform: translateX(-50%); pointer-events: none; z-index: 1; min-width: 130px;
+    position: absolute; top: 100%; transform: translateX(-50%); margin-top: 2px; pointer-events: none; z-index: 1; min-width: 130px;
     background: var(--card-background-color, #222); color: var(--primary-text-color);
     border: 1px solid var(--divider-color); border-radius: 8px; padding: 6px 8px; font-size: 12px; line-height: 1.5;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); white-space: nowrap;
   }
+  .btip.up { top: auto; bottom: calc(100% - 6px); margin-top: 0; }
   .btip .tr { display: flex; align-items: center; gap: 6px; }
   .btip .tr i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
   .btip .tr span { color: var(--secondary-text-color); flex: 1; }

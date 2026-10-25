@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
+import { repeat } from "lit/directives/repeat.js";
 
 // Dezente Wetter-Animation im Hintergrund (Regen, Schnee, Sonne, Sterne, Wolken, Nebel, Blitz, Wind).
 // Läuft über die Web Animations API statt CSS-@keyframes: die sind in Shadow-DOM-Stylesheets
@@ -85,8 +86,8 @@ function items(layer: Layer, seed: number): Item[] {
     case "flash":
       return [{
         cls: "flash", style: "",
-        anim: [{ opacity: 0, offset: 0 }, { opacity: 0, offset: 0.9 }, { opacity: 0.35, offset: 0.91 }, { opacity: 0, offset: 0.93 }, { opacity: 0.22, offset: 0.95 }, { opacity: 0, offset: 0.97 }, { opacity: 0, offset: 1 }],
-        dur: 9000, delay: -3000,
+        anim: [{ opacity: 0, offset: 0 }, { opacity: 0, offset: 0.1 }, { opacity: 0.38, offset: 0.11 }, { opacity: 0, offset: 0.13 }, { opacity: 0.24, offset: 0.15 }, { opacity: 0, offset: 0.17 }, { opacity: 0, offset: 1 }],
+        dur: 8000, delay: 0,
       }];
   }
 }
@@ -106,27 +107,56 @@ function itemsFor(condition: string, night: boolean): Item[] {
 
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+interface Group { key: string; items: Item[]; leaving?: boolean }
+const FADE = 1500;
+
 export class WetterSky extends LitElement {
-  static properties = { condition: {}, night: { type: Boolean } };
+  static properties = { condition: {}, night: { type: Boolean }, _groups: { state: true } };
   condition?: string;
   night = false;
+  // beim Wetterwechsel blendet die alte Ebene aus, während die neue einblendet
+  private _groups: Group[] = [];
+  private _started = new WeakSet<Element>();
 
-  protected render(): TemplateResult | typeof nothing {
-    if (!this.condition || reducedMotion()) return nothing;
-    const list = itemsFor(this.condition, this.night);
-    if (!list.length) return nothing;
-    return html`${list.map((it) => html`<i class=${it.cls} style=${it.style}>${it.cls.startsWith("lane") ? html`<b></b>` : nothing}</i>`)}`;
+  protected willUpdate(changed: PropertyValues): void {
+    if (!changed.has("condition") && !changed.has("night")) return;
+    const key = this.condition && !reducedMotion() ? `${this.condition}|${this.night}` : "";
+    const cur = this._groups.find((g) => !g.leaving);
+    if (cur?.key === key) return;
+    this._groups = [
+      ...this._groups.filter((g) => g !== cur && !g.leaving),
+      ...(cur ? [{ ...cur, leaving: true }] : []),
+      ...(key ? [{ key, items: itemsFor(this.condition!, this.night) }] : []),
+    ];
   }
 
-  protected updated(changed: PropertyValues): void {
-    if (!(changed.has("condition") || changed.has("night")) || !this.condition) return;
-    const list = itemsFor(this.condition, this.night);
-    const els = this.renderRoot.querySelectorAll("i");
-    els.forEach((el, k) => {
-      const it = list[k];
-      if (!it || typeof el.animate !== "function") return;
-      el.getAnimations?.().forEach((a) => a.cancel());
-      el.animate(it.anim, { duration: it.dur, delay: it.delay, iterations: Infinity, easing: it.easing ?? "linear", direction: it.dir ?? "normal" });
+  protected render(): TemplateResult {
+    return html`${repeat(this._groups, (g) => g.key, (g) => html`<div class="g" data-key=${g.key}>
+      ${g.items.map((it) => html`<i class=${it.cls} style=${it.style}>${it.cls.startsWith("lane") ? html`<b></b>` : nothing}</i>`)}
+    </div>`)}`;
+  }
+
+  protected updated(): void {
+    const groups = this.renderRoot.querySelectorAll<HTMLElement>(".g");
+    groups.forEach((el) => {
+      const g = this._groups.find((x) => x.key === el.dataset.key);
+      if (!g || typeof el.animate !== "function") return;
+      if (g.leaving) {
+        if (this._started.has(el) && !el.dataset.out) {
+          el.dataset.out = "1";
+          el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FADE, fill: "forwards" }).onfinish = () => {
+            this._groups = this._groups.filter((x) => x !== g);
+          };
+        } else if (!this._started.has(el)) this._groups = this._groups.filter((x) => x !== g);
+        return;
+      }
+      if (this._started.has(el)) return;
+      this._started.add(el);
+      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE });
+      el.querySelectorAll("i").forEach((i, k) => {
+        const it = g.items[k];
+        if (it) i.animate(it.anim, { duration: it.dur, delay: it.delay, iterations: Infinity, easing: it.easing ?? "linear", direction: it.dir ?? "normal" });
+      });
     });
   }
 
@@ -136,17 +166,18 @@ export class WetterSky extends LitElement {
       -webkit-mask-image: linear-gradient(180deg, #000 0, #000 45%, transparent 100%);
       mask-image: linear-gradient(180deg, #000 0, #000 45%, transparent 100%);
     }
+    .g { position: absolute; inset: 0; }
     i { position: absolute; top: 0; left: 0; will-change: transform; }
     .drop { width: 1.5px; border-radius: 1px; background: linear-gradient(180deg, transparent, var(--wa-drop)); }
     .flake, .star { border-radius: 50%; background: var(--wa-flake); }
     .star { will-change: opacity; }
     .glow {
-      left: auto; right: -90px; top: -110px; width: 340px; height: 340px; border-radius: 50%;
-      background: radial-gradient(circle, rgba(255, 214, 102, 0.45) 0, rgba(255, 196, 70, 0.18) 35%, transparent 70%);
+      left: auto; right: -130px; top: -150px; width: 440px; height: 440px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 236, 170, 0.6) 0, rgba(255, 222, 120, 0.42) 14%, rgba(255, 200, 80, 0.16) 36%, transparent 68%);
     }
     .rays {
       left: auto; right: -330px; top: -350px; width: 820px; height: 820px; border-radius: 50%; opacity: 0.22;
-      background: repeating-conic-gradient(from 0deg, rgba(255, 220, 140, 0.12) 0deg 3deg, transparent 6deg 15deg, rgba(255, 220, 140, 0.12) 18deg);
+      background: repeating-conic-gradient(from 0deg, rgba(255, 220, 140, 0.16) 0deg, transparent 9deg, rgba(255, 220, 140, 0.16) 20deg);
       -webkit-mask-image: radial-gradient(circle, #000 0, rgba(0, 0, 0, 0.5) 20%, transparent 50%);
       mask-image: radial-gradient(circle, #000 0, rgba(0, 0, 0, 0.5) 20%, transparent 50%);
     }
