@@ -114,6 +114,8 @@ export class WetterApp extends LitElement {
 
   protected updated(): void {
     if (this._tab === "forecast") this.loadRecent();
+    const hours = this.renderRoot.querySelector<HTMLElement>(".hours");
+    if (hours) this.fadeEdges(hours);
     this.syncDetail();
   }
 
@@ -153,6 +155,13 @@ export class WetterApp extends LitElement {
     const hi = Math.max(...seen, d0.temperature ?? -Infinity);
     if (lo === d0.templow && hi === d0.temperature) return fc;
     return [{ ...d0, templow: lo, temperature: hi }, ...fc!.slice(1)];
+  }
+
+  /** Ränder der Stundenleiste ausblenden, wo es noch weitergeht — zeigt, dass man wischen kann */
+  private fadeEdges(el: HTMLElement): void {
+    const max = el.scrollWidth - el.clientWidth;
+    el.classList.toggle("fl", el.scrollLeft > 2);
+    el.classList.toggle("fr", el.scrollLeft < max - 2);
   }
 
   /** Index des Tages in der Tagesvorhersage, zu dem dieser Zeitpunkt gehört (Stunde → richtiger Tag im Detail) */
@@ -226,7 +235,7 @@ export class WetterApp extends LitElement {
     const blend = temperatureBlender(fc, nowTemp);
     return html`
       ${head("mdi:clock-outline", "Stündlich")}
-      <div class="hours">
+      <div class="hours" @scroll=${(e: Event) => this.fadeEdges(e.currentTarget as HTMLElement)}>
         ${items.map((f, i) => html`
           <div class="hr" @click=${() => this.openDetail(this.dayIndex(f.datetime), "temp")}>
             <div class="t">${i === 0 ? "Jetzt" : hour(new Date(f.datetime))}</div>
@@ -331,6 +340,12 @@ export class WetterApp extends LitElement {
 
       .hours { display: flex; overflow-x: auto; gap: 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
       .hours::-webkit-scrollbar { display: none; }
+      .hours.fl { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 36px); mask-image: linear-gradient(90deg, transparent 0, #000 36px); }
+      .hours.fr { -webkit-mask-image: linear-gradient(270deg, transparent 0, #000 36px); mask-image: linear-gradient(270deg, transparent 0, #000 36px); }
+      .hours.fl.fr {
+        -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 36px, #000 calc(100% - 36px), transparent 100%);
+        mask-image: linear-gradient(90deg, transparent 0, #000 36px, #000 calc(100% - 36px), transparent 100%);
+      }
       .hr { flex: 1 0 54px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0; }
       .hr .t { font-size: 12px; color: var(--wa-text2); white-space: nowrap; }
       .hr .wicon { width: 30px; height: 30px; }
