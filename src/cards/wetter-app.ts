@@ -33,6 +33,8 @@ export class WetterApp extends LitElement {
   private _recent?: StatResult;
   private _recentKey?: string;
   private _ro?: ResizeObserver;
+  private _hoursRo?: ResizeObserver;
+  private _hoursEl?: HTMLElement;
 
   private hourly = new ForecastController(this, "hourly", () => this._config?.weather);
   private daily = new ForecastController(this, "daily", () => this._config?.weather);
@@ -67,6 +69,8 @@ export class WetterApp extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this._ro?.disconnect();
+    this._hoursRo?.disconnect();
+    this._hoursEl = undefined;
     this.syncDetail();
   }
 
@@ -114,7 +118,16 @@ export class WetterApp extends LitElement {
 
   protected updated(): void {
     if (this._tab === "forecast") this.loadRecent();
+    // Größe beobachten: in HA ist die Leiste beim ersten Zeichnen oft noch unsichtbar (Breite 0)
     const hours = this.renderRoot.querySelector<HTMLElement>(".hours");
+    if (hours !== this._hoursEl) {
+      this._hoursRo?.disconnect();
+      this._hoursEl = hours ?? undefined;
+      if (hours && typeof ResizeObserver === "function") {
+        this._hoursRo = new ResizeObserver(() => this.fadeEdges(hours));
+        this._hoursRo.observe(hours);
+      }
+    }
     if (hours) this.fadeEdges(hours);
     this.syncDetail();
   }
