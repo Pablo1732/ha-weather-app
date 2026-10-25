@@ -34,6 +34,7 @@ export class WetterKompakt extends LitElement {
     _config: { state: true },
     _m: { state: true },
     _cols: { state: true },
+    _detail: { state: true },
   };
 
   hass?: HomeAssistant;
@@ -43,6 +44,9 @@ export class WetterKompakt extends LitElement {
   /** so viele Stunden, wie nebeneinander passen */
   private _cols = 6;
   private _ro?: ResizeObserver;
+  /** offenes Tages-Popup (Index in der Tagesvorhersage) */
+  private _detail?: number;
+  private _detailEl?: HTMLElement & Record<string, unknown>;
 
   private hourly = new ForecastController(this, "hourly", () => this._config?.weather);
   private daily = new ForecastController(this, "daily", () => this._config?.weather);
@@ -76,6 +80,7 @@ export class WetterKompakt extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this._ro?.disconnect();
+    this.syncDetail();
   }
 
   // nur neu rendern, wenn sich eine relevante Entität geändert hat
@@ -90,6 +95,32 @@ export class WetterKompakt extends LitElement {
 
   protected updated(): void {
     this.load();
+    this.syncDetail();
+  }
+
+  /** Tages-Popup wie in der Wetter-App, direkt über dem Dashboard (Schließen bleibt auf dem Dashboard) */
+  private syncDetail(): void {
+    if (!this.isConnected || this._detail == null || !this.daily.forecast || !this.hass) {
+      this._detailEl?.remove();
+      this._detailEl = undefined;
+      return;
+    }
+    let el = this._detailEl;
+    if (!el) {
+      el = document.createElement("wetter-app-day-detail") as HTMLElement & Record<string, unknown>;
+      el.addEventListener("close", () => (this._detail = undefined));
+      el.addEventListener("select", (e) => (this._detail = (e as CustomEvent).detail.index));
+      el.addEventListener("metric", (e) => ((this._detailEl as Record<string, unknown>).metric = (e as CustomEvent).detail.metric));
+      el.metric = "temp";
+      document.body.appendChild(el);
+      this._detailEl = el;
+    }
+    const nowTemp = stateNum(this.hass, this._config.sensors?.temperature) ?? this.hass.states[this._config.weather]?.attributes.temperature;
+    Object.assign(el, {
+      hass: this.hass, config: this._config, hourly: this.hourly.forecast ?? [],
+      daily: withMeasuredToday(this.daily.forecast, this._m.temp, nowTemp), index: this._detail,
+    });
+    el.classList.toggle("dark", !!this.hass.themes?.darkMode);
   }
 
   /**
@@ -139,9 +170,11 @@ export class WetterKompakt extends LitElement {
     window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
   }
 
-  /** Antippbare Bereiche: nur mit navigation_path und ohne open_button */
+  /** Antippbare Bereiche: nur mit navigation_path und ohne open_button; Tage öffnen nur das Popup */
   private tap(link: string) {
-    return this._config.navigation_path && !this._config.open_button ? () => this.open(link) : undefined;
+    if (!this._config.navigation_path || this._config.open_button) return undefined;
+    const day = /^day:(\d+)/.exec(link);
+    return day ? () => (this._detail = Number(day[1])) : () => this.open(link);
   }
 
   protected render() {
