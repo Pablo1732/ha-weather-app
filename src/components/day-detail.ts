@@ -7,7 +7,7 @@ import { compass, num, rain, stateNum, temp } from "../util/format";
 import { weatherIcon } from "../util/icons";
 import { temperatureBlender } from "../util/blend";
 import type { ChartMarker, ChartSeries, ChartTick } from "./chart";
-import { cardStyles, legend, legendStyles } from "./styles";
+import { cardStyles, legend, legendStyles, type LegendItem } from "./styles";
 
 export type Metric = "temp" | "rain" | "wind";
 
@@ -43,10 +43,16 @@ export function keepDay(daily: ForecastItem[], index: number, shown?: ShownDay):
 
 export const shownDay = (daily: ForecastItem[], index: number): ShownDay => ({ index, day: dayStart(daily[index].datetime) });
 
+/** Linienstil: gemessen durchgezogen (nur heute), Vorhersage gestrichelt */
+const lineStyles = (today: boolean): LegendItem[] => [
+  today && { color: "var(--wa-text2)", label: "gemessen", kind: "line" as const },
+  { color: "var(--wa-text2)", label: "Vorhersage", kind: "dash" as const },
+].filter(Boolean) as LegendItem[];
+
 /**
  * Tagesdetail als Vollbild-Ebene (mobil) bzw. Dialog (Desktop):
  * Tagesleiste, Zusammenfassung und Stundendiagramm für Temperatur, Niederschlag oder Wind.
- * Heute: vergangene Stunden aus der Stationsstatistik (gestrichelt), Rest aus der Vorhersage.
+ * Heute: vergangene Stunden aus der Stationsstatistik (durchgezogen), Vorhersage immer gestrichelt.
  */
 export class WetterDayDetail extends LitElement {
   static properties = {
@@ -240,7 +246,7 @@ export class WetterDayDetail extends LitElement {
       const cur = now ? stateNum(this.hass, s.temperature) : undefined;
       const blend = temperatureBlender(this.hourly, cur);
       const pts = [...past, ...(cur != null ? [{ t: now!, v: cur }] : []), ...future.filter((p) => !now || p.t > now).map((p) => ({ t: p.t, v: blend(p.t, p.h.temperature) }))];
-      series.push({ type: "area", points: pts, color: "var(--wa-temp, #4fc3f7)", dashUntil: now, label: "Temperatur", unit: "°", digits: 1 });
+      series.push({ type: "area", points: pts, color: "var(--wa-temp, #4fc3f7)", dashFrom: now ?? start, label: "Temperatur", unit: "°", digits: 1 });
       const valid = pts.filter((p) => p.v != null) as { t: number; v: number }[];
       if (valid.length) {
         const hi = valid.reduce((a, b) => (b.v > a.v ? b : a));
@@ -263,7 +269,7 @@ export class WetterDayDetail extends LitElement {
       const past = s.wind_speed && now ? this.pastRows(s.wind_speed).map((r) => ({ t: r.start + HOUR / 2, v: r.mean })) : [];
       const cur = now ? stateNum(this.hass, s.wind_speed) : undefined;
       const pts = [...past, ...(cur != null ? [{ t: now!, v: cur }] : []), ...future.filter((p) => !now || p.t > now).map((p) => ({ t: p.t, v: p.h.wind_speed }))];
-      series.push({ type: "area", points: pts, color: "var(--wa-wind, #81c784)", dashUntil: now, label: "Wind", unit: " km/h", digits: 0 });
+      series.push({ type: "area", points: pts, color: "var(--wa-wind, #81c784)", dashFrom: now ?? start, label: "Wind", unit: " km/h", digits: 0 });
       if (s.wind_gust && now) {
         series.push({ type: "line", points: this.pastRows(s.wind_gust).map((r) => ({ t: r.start + HOUR / 2, v: r.max })), color: "var(--wa-gust, #ffb74d)", label: "Böe", unit: " km/h", digits: 0 });
       }
@@ -279,9 +285,11 @@ export class WetterDayDetail extends LitElement {
           return f?.condition ? weatherIcon(f.condition, f.is_daytime === false) : nothing;
         }}>
       </wetter-app-chart>
+      ${this.metric === "temp" ? legend(lineStyles(!!now)) : nothing}
       ${this.metric === "wind" ? html`${this.renderWindDirs(start, future)}${legend([
         { color: "var(--wa-wind, #81c784)", label: "Wind", kind: "line" },
         series.length > 1 && { color: "var(--wa-gust, #ffb74d)", label: "Böen", kind: "line" },
+        ...lineStyles(!!now),
       ])}` : nothing}
       ${this.metric === "rain" ? legend([
         { color: "var(--wa-rain)", label: "Menge pro Stunde" },
@@ -291,20 +299,21 @@ export class WetterDayDetail extends LitElement {
     `;
   }
 
-  /** Richtung alle 3 Std.: vergangene Stunden gemessen, sonst Vorhersage */
+  /** Richtung je 3-Std.-Block (mittlere Stunde): vergangene Stunden gemessen, sonst Vorhersage */
   private renderWindDirs(start: number, future: { t: number; h: ForecastItem }[]) {
     const id = this.config.sensors?.wind_direction;
     const measured = new Map((id ? this.pastRows(id) : []).map((r) => [r.start, r.mean]));
-    const step = [0, 3, 6, 9, 12, 15, 18, 21].map((h) => {
-      const t = new Date(start); t.setHours(h); // Zeitumstellung: Stunde setzen statt +3 h rechnen
-      const dir = measured.get(t.getTime()) ?? future.find((p) => p.t === t.getTime())?.h.wind_bearing;
-      return { t: t.getTime(), h, dir };
+    // echte Stunden ab Tagesbeginn wie die Diagramm-Achse (am Tag der Zeitumstellung ≠ Uhrzeit)
+    const hh = (t: number) => new Date(t).getHours();
+    const step = [1, 4, 7, 10, 13, 16, 19, 22].map((k) => {
+      const t = start + k * HOUR;
+      const dir = measured.get(t) ?? future.find((p) => p.t === t)?.h.wind_bearing;
+      return { t, dir, title: `${hh(t - HOUR)}–${hh(t + 2 * HOUR)} Uhr` };
     }).filter((p) => p.dir != null);
-    // gleiche Ränder wie im Diagramm (links 6 px, rechts 38 px) → Pfeile stehen unter ihrer Uhrzeit
+    // gleiche Ränder wie im Diagramm (links 6 px, rechts 38 px); Stundenmitte → Pfeile mittig in ihrem Block
     return html`<div class="dirs">
-      ${step.map((p) => html`<div style="left:calc(6px + (100% - 44px) * ${(p.t - start) / (24 * HOUR)})">
-        ${icon("mdi:navigation", `transform:rotate(${p.dir! + 180}deg)`)}
-        <span>${p.h}</span></div>`)}
+      ${step.map((p) => html`<div style="left:calc(6px + (100% - 44px) * ${(p.t + HOUR / 2 - start) / (24 * HOUR)})" title=${p.title}>
+        ${icon("mdi:navigation", `transform:rotate(${p.dir! + 180}deg)`)}</div>`)}
     </div>`;
   }
 
@@ -365,7 +374,7 @@ export class WetterDayDetail extends LitElement {
       .big { font-size: 28px; font-weight: 500; }
       .dir { font-size: 18px; color: var(--wa-text2); font-weight: 500; }
       .sub { font-size: 13px; color: var(--wa-text2); }
-      .dirs { position: relative; height: 36px; margin-top: 6px; }
+      .dirs { position: relative; height: 18px; margin-top: 6px; }
       .dirs div {
         position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column;
         align-items: center; font-size: 11px; color: var(--wa-text2); white-space: nowrap;

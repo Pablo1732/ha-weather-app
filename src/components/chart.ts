@@ -21,8 +21,8 @@ export interface ChartSeries {
   points: ChartPoint[];
   color: string;
   axis?: "left" | "right";
-  /** Linie vor diesem Zeitpunkt gestrichelt (Vergangenheit vs. Vorhersage) */
-  dashUntil?: number;
+  /** Linie ab diesem Zeitpunkt gestrichelt (Messung durchgezogen, Vorhersage gestrichelt) */
+  dashFrom?: number;
   /** Balkenbreite in ms (Standard: Abstand der Punkte) */
   barWidth?: number;
   label?: string;
@@ -301,12 +301,12 @@ export class WetterChart extends LitElement {
           </linearGradient></defs>
           <path d=${`${smooth(xy)} L${xy[xy.length - 1][0]},${bottom} L${xy[0][0]},${bottom}Z`} fill="url(#${id})"/>`);
       }
-      if (s.dashUntil != null && pts[0].t < s.dashUntil) {
-        const cut = pts.findIndex((p) => p.t >= s.dashUntil!);
+      if (s.dashFrom != null) {
+        const cut = pts.findIndex((p) => p.t >= s.dashFrom!);
         const a = cut < 0 ? xy : xy.slice(0, cut + 1);
         const b = cut < 0 ? [] : xy.slice(cut);
-        sp.push(svg`<path d=${smooth(a)} class="ln" style="stroke:${s.color}" stroke-dasharray="5 5"/>`);
-        if (b.length > 1) sp.push(svg`<path d=${smooth(b)} class="ln" style="stroke:${s.color}"/>`);
+        if (a.length > 1) sp.push(svg`<path d=${smooth(a)} class="ln" style="stroke:${s.color}"/>`);
+        if (b.length > 1) sp.push(svg`<path d=${smooth(b)} class="ln" style="stroke:${s.color}" stroke-dasharray="5 5"/>`);
       } else {
         sp.push(svg`<path d=${smooth(xy)} class="ln" style="stroke:${s.color}" />`);
       }

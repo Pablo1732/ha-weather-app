@@ -1,6 +1,6 @@
 {
   "name": "ha-weather-app",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Wetter-App für Home Assistant: Vorhersage + Historie, angelehnt an Apple Wetter",
   "type": "module",
   "private": true,
