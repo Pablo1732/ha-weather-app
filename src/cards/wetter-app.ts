@@ -147,10 +147,12 @@ export class WetterApp extends LitElement {
     return html`
       ${err ? html`<div class="warn">Vorhersage nicht verfügbar: ${err}</div>` : nothing}
       <div class="cols">
-        <section class="card">${this.renderHourly(nowTemp, night)}</section>
-        <section class="card">${this.renderDaily(nowTemp)}</section>
+        <div class="left">
+          <section class="card hourly">${this.renderHourly(nowTemp, night)}</section>
+          ${renderTiles({ hass: this.hass!, config: this._config, hourly: this.hourly.forecast, recent: this._recent })}
+        </div>
+        <section class="card daily">${this.renderDaily(nowTemp)}</section>
       </div>
-      ${renderTiles({ hass: this.hass!, config: this._config, hourly: this.hourly.forecast, recent: this._recent })}
       ${this._detail != null && this.daily.forecast
         ? html`<wetter-app-day-detail .hass=${this.hass} .config=${this._config} .hourly=${this.hourly.forecast ?? []}
             .daily=${this.daily.forecast} .index=${this._detail} .metric=${this._metric}
@@ -229,7 +231,7 @@ export class WetterApp extends LitElement {
         border-radius: var(--ha-card-border-radius, 12px);
         background: linear-gradient(180deg, var(--wa-tint) 0, transparent 520px), var(--primary-background-color, #111);
       }
-      .app > * { width: 100%; max-width: 1100px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+      .app > * { width: 100%; max-width: 1200px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
       /* Ganzseiten-Modus (Panel-Ansicht): ganze Fläche, keine Rundung */
       /* Panel-Ansicht setzt --ha-card-border-radius: 0 → innere Karten bekommen den HA-Standardradius */
       .app.page {
@@ -256,7 +258,15 @@ export class WetterApp extends LitElement {
 
       main { display: flex; flex-direction: column; gap: 12px; }
       .cols { display: grid; gap: 12px; }
-      .wide .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+      /* Handy: Stündlich, 7 Tage, Kacheln untereinander. PC: links Stündlich + Kacheln, rechts 7 Tage */
+      .left { display: contents; }
+      .hourly { order: 0; } .daily { order: 1; } .cols .tiles { order: 2; }
+      .wide .cols { grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr); align-items: start; }
+      .wide .left { display: flex; flex-direction: column; gap: 12px; }
+      .wide .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .wide .tile.moont { grid-column: auto; }
+      .wide .moont .moon { flex-direction: column-reverse; align-items: stretch; }
+      .wide .moont .moonimg { align-self: center; }
 
       .hours { display: flex; overflow-x: auto; gap: 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
       .hours::-webkit-scrollbar { display: none; }

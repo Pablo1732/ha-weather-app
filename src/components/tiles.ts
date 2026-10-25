@@ -2,6 +2,7 @@ import { css, html, nothing, svg } from "lit";
 import type { ForecastItem, HomeAssistant, StatResult, WetterConfig } from "../types";
 import { moonInfo, sunTimes } from "../util/astro";
 import { moonLabel } from "../util/conditions";
+import { MOON_JPG } from "../util/moon-image";
 import { clock, compass, num, rain, stateNum, temp } from "../util/format";
 import { head } from "./styles";
 
@@ -174,7 +175,7 @@ function moonTile({ hass, config }: TileData) {
   const m = moonInfo(new Date());
   const days = Math.round((m.nextFull.getTime() - Date.now()) / 86_400_000);
   const k = m.illumination;
-  return html`<section class="card tile wide2">${head("mdi:moon-waxing-gibbous", phase ? moonLabel(phase) : "Mond")}
+  return html`<section class="card tile wide2 moont">${head("mdi:moon-waxing-gibbous", phase ? moonLabel(phase) : "Mond")}
     <div class="moon">
       <div>
         <div class="row"><span>Beleuchtung</span><b>${Math.round(k * 100)} %</b></div>
@@ -184,14 +185,7 @@ function moonTile({ hass, config }: TileData) {
     </div></section>`;
 }
 
-// Mare (dunkle Flächen) in Einheitskoordinaten (−1…1), grob nach der echten Mondvorderseite
-const MARIA: [number, number, number, number][] = [
-  [-0.55, 0.05, 0.3, 0.45], [-0.3, -0.35, 0.28, 0.22], [0.15, -0.38, 0.16, 0.14], [0.3, -0.1, 0.2, 0.16],
-  [0.66, -0.3, 0.1, 0.09], [0.55, 0.15, 0.12, 0.17], [0.35, 0.3, 0.08, 0.08], [-0.2, 0.35, 0.18, 0.13],
-  [-0.48, 0.42, 0.09, 0.08], [-0.05, -0.68, 0.35, 0.07], [-0.15, -0.08, 0.14, 0.1],
-];
-
-/** Mond mit Oberflächenstruktur; unbeleuchteter Teil als weiche Schattenfläche darüber. */
+/** Mond als NASA-Foto; unbeleuchteter Teil als weiche Schattenfläche darüber. */
 function moonSvg(k: number, waxing: boolean) {
   const R = 20, C = 50;
   const rx = R * Math.abs(1 - 2 * k);
@@ -199,21 +193,12 @@ function moonSvg(k: number, waxing: boolean) {
   const dark = `M${C} ${C - R} A${R} ${R} 0 0 0 ${C} ${C + R} A${rx} ${R} 0 0 ${k > 0.5 ? 1 : 0} ${C} ${C - R}Z`;
   return svg`<svg class="moonimg" viewBox="28 28 44 44" aria-hidden="true">
     <defs>
-      <radialGradient id="mg" cx="0.42" cy="0.38" r="0.65">
-        <stop offset="0" stop-color="#f4f3ee"/><stop offset="0.75" stop-color="#d4d3cc"/><stop offset="1" stop-color="#a9a8a2"/>
-      </radialGradient>
-      <filter id="mb" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.1"/></filter>
-      <filter id="ms" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="0.5"/></filter>
+      <filter id="ms" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="0.6"/></filter>
       <clipPath id="mc"><circle cx=${C} cy=${C} r=${R}/></clipPath>
     </defs>
     <g clip-path="url(#mc)">
-      <circle cx=${C} cy=${C} r=${R} fill="url(#mg)"/>
-      <g filter="url(#mb)" fill="#80838a" fill-opacity="0.5">
-        ${MARIA.map(([x, y, a, b]) => svg`<ellipse cx=${C + x * R} cy=${C + y * R} rx=${a * R} ry=${b * R}/>`)}
-      </g>
-      <circle cx=${C - 0.12 * R} cy=${C + 0.72 * R} r="0.9" fill="#fff" fill-opacity="0.8"/>
-      <circle cx=${C - 0.33 * R} cy=${C - 0.05 * R} r="0.7" fill="#fff" fill-opacity="0.6"/>
-      ${k < 0.995 ? svg`<path d=${dark} fill="#0a0c12" fill-opacity="0.86" filter="url(#ms)"
+      <image href=${MOON_JPG} x=${C - R} y=${C - R} width=${2 * R} height=${2 * R}/>
+      ${k < 0.995 ? svg`<path d=${dark} fill="#05070c" fill-opacity="0.88" filter="url(#ms)"
         transform=${waxing ? "" : `translate(${2 * C} 0) scale(-1 1)`}/>` : nothing}
     </g>
   </svg>`;

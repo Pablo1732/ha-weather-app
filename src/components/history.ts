@@ -42,6 +42,7 @@ export class WetterHistory extends LitElement {
     _err: { state: true },
     _compare: { state: true },
     _extra: { state: true },
+    _bft: { state: true },
   };
 
   hass?: HomeAssistant;
@@ -52,6 +53,7 @@ export class WetterHistory extends LitElement {
   private _key?: string;
   private _compare = false;
   private _extra: Extra = "pressure";
+  private _bft?: number; // in der Windrose angetippte Beaufort-Stufe
 
   private range = new RangeController(
     this,
@@ -288,7 +290,11 @@ export class WetterHistory extends LitElement {
       ...(gust.length ? [{ type: "line" as const, points: gust.map((x) => ({ t: center(x), v: x.max })), color: "var(--wa-gust, #ffb74d)", label: "Böe", unit: " km/h", digits: 0 }] : []),
     ];
     return html`<section class="card">${head("mdi:weather-windy", "Wind")}
-      ${s.wind_direction ? renderWindrose(dirRows, speedForRose, r.live ? { direction: stateNum(this.hass, s.wind_direction), speed: stateNum(this.hass, s.wind_speed) } : {}) : nothing}
+      ${s.wind_direction ? renderWindrose(dirRows, speedForRose, {
+        now: r.live ? { direction: stateNum(this.hass, s.wind_direction), speed: stateNum(this.hass, s.wind_speed) } : {},
+        selected: this._bft,
+        onSelect: (i) => (this._bft = i),
+      }) : nothing}
       ${this.chart(r, series, { yMin: 0, period: p.main, height: 160 })}
       <div class="legend"><i class="ln" style="background:#81c784"></i>Durchschnitt<i class="ln" style="background:#ffb74d"></i>stärkste Böe</div>
     </section>`;
