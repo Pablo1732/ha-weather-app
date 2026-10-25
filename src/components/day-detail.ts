@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { icon } from "../util/mdi";
 import { fetchStatistics, fetchUntilNow } from "../data/statistics";
 import type { ForecastItem, HomeAssistant, StatResult, StatType, WetterConfig } from "../types";
 import { conditionLabel } from "../util/conditions";
@@ -17,7 +18,7 @@ const METRICS: { id: Metric; label: string; icon: string }[] = [
 ];
 
 const HOUR = 3_600_000;
-const WD = ["S", "M", "D", "M", "D", "F", "S"];
+const WD = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 
 function dayStart(iso: string): number {
   const d = new Date(iso);
@@ -104,7 +105,7 @@ export class WetterDayDetail extends LitElement {
     const key = `${start}|${end}`;
     if (key === this._pastKey) return;
     this._pastKey = key;
-    const ids = [s.temperature, s.rain_total, s.wind_speed, s.wind_gust].filter(Boolean) as string[];
+    const ids = [s.temperature, s.rain_total, s.wind_speed, s.wind_gust, s.wind_direction].filter(Boolean) as string[];
     const types: StatType[] = ["mean", "max", "change"];
     const req = end < start + 24 * HOUR
       ? fetchUntilNow(this.hass, { ids, start: new Date(start), types })
@@ -132,7 +133,7 @@ export class WetterDayDetail extends LitElement {
       <div class="backdrop" @click=${this.close}></div>
       <div class="sheet" role="dialog" aria-label="Tagesdetail">
         <div class="top">
-          <button class="ib" aria-label="Schließen" @click=${this.close}><ha-icon icon="mdi:close"></ha-icon></button>
+          <button class="ib" aria-label="Schließen" @click=${this.close}>${icon("mdi:close")}</button>
           <div class="ttl">${METRICS.find((m) => m.id === this.metric)!.label}</div>
           <span style="width:40px"></span>
         </div>
@@ -148,7 +149,7 @@ export class WetterDayDetail extends LitElement {
 
         <div class="chips">
           ${METRICS.map((m) => html`<button class=${m.id === this.metric ? "on" : ""}
-            @click=${() => this.setMetric(m.id)}><ha-icon icon=${m.icon}></ha-icon>${m.label}</button>`)}
+            @click=${() => this.setMetric(m.id)}>${icon(m.icon)}${m.label}</button>`)}
         </div>
 
         <section class="card">
@@ -278,7 +279,10 @@ export class WetterDayDetail extends LitElement {
           return f?.condition ? weatherIcon(f.condition, f.is_daytime === false) : nothing;
         }}>
       </wetter-app-chart>
-      ${this.metric === "wind" ? this.renderWindDirs(start, future) : nothing}
+      ${this.metric === "wind" ? html`${this.renderWindDirs(start, future)}${legend([
+        { color: "var(--wa-wind, #81c784)", label: "Wind", kind: "line" },
+        series.length > 1 && { color: "var(--wa-gust, #ffb74d)", label: "Böen", kind: "line" },
+      ])}` : nothing}
       ${this.metric === "rain" ? legend([
         { color: "var(--wa-rain)", label: "Menge pro Stunde" },
         { color: "var(--wa-prob, #90caf9)", label: "Wahrscheinlichkeit", kind: "line" },
@@ -287,13 +291,20 @@ export class WetterDayDetail extends LitElement {
     `;
   }
 
-  private renderWindDirs(start: number, pts: { t: number; h: ForecastItem }[]) {
-    const step = pts.filter((p) => new Date(p.t).getHours() % 3 === 0);
+  /** Richtung alle 3 Std.: vergangene Stunden gemessen, sonst Vorhersage */
+  private renderWindDirs(start: number, future: { t: number; h: ForecastItem }[]) {
+    const id = this.config.sensors?.wind_direction;
+    const measured = new Map((id ? this.pastRows(id) : []).map((r) => [r.start, r.mean]));
+    const step = [0, 3, 6, 9, 12, 15, 18, 21].map((h) => {
+      const t = new Date(start); t.setHours(h); // Zeitumstellung: Stunde setzen statt +3 h rechnen
+      const dir = measured.get(t.getTime()) ?? future.find((p) => p.t === t.getTime())?.h.wind_bearing;
+      return { t: t.getTime(), h, dir };
+    }).filter((p) => p.dir != null);
     // gleiche Ränder wie im Diagramm (links 6 px, rechts 38 px) → Pfeile stehen unter ihrer Uhrzeit
     return html`<div class="dirs">
       ${step.map((p) => html`<div style="left:calc(6px + (100% - 44px) * ${(p.t - start) / (24 * HOUR)})">
-        <ha-icon icon="mdi:navigation" style="transform:rotate(${(p.h.wind_bearing ?? 0) + 180}deg)"></ha-icon>
-        <span>${new Date(p.t).getHours()}</span></div>`)}
+        ${icon("mdi:navigation", `transform:rotate(${p.dir! + 180}deg)`)}
+        <span>${p.h}</span></div>`)}
     </div>`;
   }
 
@@ -344,14 +355,14 @@ export class WetterDayDetail extends LitElement {
         display: flex; align-items: center; gap: 6px; border: 1px solid var(--wa-divider); background: none;
         color: var(--wa-text); font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 16px; cursor: pointer;
       }
-      .chips ha-icon { --mdc-icon-size: 16px; }
+      .chips .mdi { --mdc-icon-size: 16px; }
       .chips button.on {
         border-color: transparent; color: var(--wa-accent); font-weight: 500;
         background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.18);
       }
       .sum { display: flex; align-items: center; gap: 12px; padding: 4px 0 12px; }
       .sum-ic .wicon { width: 52px; height: 52px; }
-      .big { font-size: 28px; font-weight: 600; }
+      .big { font-size: 28px; font-weight: 500; }
       .dir { font-size: 18px; color: var(--wa-text2); font-weight: 500; }
       .sub { font-size: 13px; color: var(--wa-text2); }
       .dirs { position: relative; height: 36px; margin-top: 6px; }
@@ -359,7 +370,7 @@ export class WetterDayDetail extends LitElement {
         position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column;
         align-items: center; font-size: 11px; color: var(--wa-text2); white-space: nowrap;
       }
-      .dirs ha-icon { --mdc-icon-size: 18px; color: var(--wa-text); }
+      .dirs .mdi { --mdc-icon-size: 18px; color: var(--wa-text); }
       /* am Ende, damit es die Grundregeln oben überschreibt.
          Breit, aber niedrig (Echo Show 960×480, Handy quer): Vollbild, Tage + Werte-Auswahl links als Spalte,
          rechts Datum und Diagramm — nichts muss vertikal gescrollt werden */

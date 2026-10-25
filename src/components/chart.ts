@@ -30,6 +30,8 @@ export interface ChartSeries {
   digits?: number;
   /** nicht im Tooltip anzeigen */
   silent?: boolean;
+  /** rechte Skala ohne Beschriftung, stattdessen der letzte Wert am Linienende (z. B. Regensumme) */
+  endLabel?: boolean;
 }
 
 export interface ChartTick {
@@ -244,7 +246,7 @@ export class WetterChart extends LitElement {
     // rechte Skala (z. B. Summe/Wahrscheinlichkeit): Beschriftung links innen, in der Farbe der Serie
     // (wird nach den Serien gezeichnet, mit Kontur → nicht von Balken/Linien verdeckt)
     const rightLabels: SVGTemplateResult[] = [];
-    if (R) {
+    if (R && !this.series.some((s) => s.axis === "right" && s.endLabel)) {
       const col = this.series.find((s) => s.axis === "right")!.color;
       for (const v of R.ticks) {
         if (v === 0) continue;
@@ -311,6 +313,13 @@ export class WetterChart extends LitElement {
     });
 
     const gridCount = parts.length;
+    for (const s of this.series) {
+      const last = s.endLabel ? [...s.points].reverse().find((p) => p.v != null) : undefined;
+      if (!last) continue;
+      const sc = s.axis === "right" && R ? R : L;
+      // über dem Linienende, rechtsbündig → bleibt in der Zeichenfläche
+      parts.push(svg`<text x=${Math.min(this.x(last.t), w - PAD.r) - 2} y=${sc.y(last.v!) - 7} class="rlab" style="fill:${s.color};text-anchor:end">${num(last.v!, s.digits ?? 1)}${s.unit ?? ""}</text>`);
+    }
     // Markierungen (z. B. H/T)
     for (const m of this.markers) {
       const x = this.x(m.t), y = L.y(m.v);
@@ -375,7 +384,7 @@ export class WetterChart extends LitElement {
     .past { fill: rgba(127, 127, 127, 0.08); }
     .ln { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
     .mk { fill: var(--primary-text-color); stroke: var(--card-background-color, #000); stroke-width: 2; }
-    .mklab { fill: var(--primary-text-color); font-size: 12px; font-weight: 600; text-anchor: middle; }
+    .mklab { fill: var(--primary-text-color); font-size: 12px; font-weight: 500; text-anchor: middle; }
     .nowl { stroke: var(--primary-text-color); stroke-width: 1; opacity: 0.5; }
     .hov { stroke: var(--primary-text-color); stroke-width: 1; }
     .hdot { stroke: var(--card-background-color, #000); stroke-width: 2; }
@@ -390,7 +399,7 @@ export class WetterChart extends LitElement {
     .tr { display: flex; align-items: center; gap: 6px; }
     .tr i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
     .tr span { color: var(--secondary-text-color); flex: 1; }
-    .tr b { font-weight: 600; }
+    .tr b { font-weight: 500; }
   `];
 }
 
@@ -418,8 +427,11 @@ function niceStep(raw: number): number {
   return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
 }
 
+/** so viele Nachkommastellen wie nötig (0,05 statt zweimal „0,1“ bei Schritten von 0,05) */
 function fmtTick(v: number): string {
-  return Number.isInteger(v) ? String(v) : num(v, 1);
+  let d = 0;
+  while (d < 3 && Math.abs(Math.round(v * 10 ** d) - v * 10 ** d) > 1e-6) d++;
+  return d === 0 ? String(Math.round(v)) : num(v, d);
 }
 
 /** Monotone kubische Interpolation — glatt, aber ohne Überschwinger (keine erfundenen Spitzen). */

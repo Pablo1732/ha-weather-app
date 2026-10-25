@@ -5,6 +5,7 @@ import { moonLabel } from "../util/conditions";
 import { MOON_JPG } from "../util/moon-image";
 import { clock, compass, num, rain, stateNum, temp } from "../util/format";
 import { head } from "./styles";
+import { icon, mdiPath } from "../util/mdi";
 
 // Detail-Kacheln unter der Vorhersage. Jede Kachel blendet sich aus, wenn ihr Sensor fehlt.
 
@@ -18,7 +19,7 @@ export interface TileData {
 
 export function renderTiles(d: TileData) {
   return html`<div class="tiles">
-    ${windTile(d)} ${feelsTile(d)} ${rainTile(d)} ${pressureTile(d)} ${humidityTile(d)} ${uvTile(d)} ${sunTile(d)} ${moonTile(d)}
+    ${windTile(d)} ${feelsTile(d)} ${humidityTile(d)} ${rainTile(d)} ${pressureTile(d)} ${uvTile(d)} ${sunTile(d)} ${moonTile(d)}
   </div>`;
 }
 
@@ -46,7 +47,7 @@ function feelsBar(f: number, t: number) {
   const color = d < 0 ? "#6ec6f0" : "#ffb74d";
   return html`<div class="fbar">
     ${d !== 0 ? html`<i class="fseg" style="left:${pos(Math.min(f, t))}%;width:${pos(Math.max(f, t)) - pos(Math.min(f, t))}%;background:${color}"></i>
-      <b class="fpill" style="left:${pos(f)}%;background:${color};transform:translateX(${d < 0 ? "-100%" : "0"})">${d < 0 ? "↓" : "↑"}${Math.abs(d)}°</b>` : nothing}
+      <b class="fpill" style="left:${pos(f)}%;background:${color};transform:translateX(${d < 0 ? "-100%" : "0"})">${icon(d < 0 ? "mdi:arrow-down-thin" : "mdi:arrow-up-thin")}${Math.abs(d)}°</b>` : nothing}
     <i class="ftick" style="left:${pos(t)}%"></i>
   </div>`;
 }
@@ -94,8 +95,10 @@ function rainTile({ hass, config, hourly, recent }: TileData) {
   return html`<section class="card tile">${head("mdi:water", "Niederschlag")}
     <div class="val">${past != null ? rain(past) : "–"}</div>
     <div class="lbl">in den letzten 24 Std.</div>
-    <div class="txt">${rate ? html`Aktuell ${num(rate)} l/m² pro Std.<br>` : nothing}
-      ${next != null ? `${rain(next)} in den nächsten 24 Std. erwartet.` : ""}</div></section>`;
+    <div class="rows bottom">
+      ${s.rain_rate ? html`<div class="row"><span>Aktuell</span><b>${rate ? `${num(rate)} l/m²/h` : "kein Regen"}</b></div>` : nothing}
+      ${next != null ? html`<div class="row"><span>Nächste 24 Std.</span><b>${rain(next)}</b></div>` : nothing}
+    </div></section>`;
 }
 
 function pressureTile({ hass, config, recent }: TileData) {
@@ -119,7 +122,8 @@ function pressureTile({ hass, config, recent }: TileData) {
       ${arc}
       <g transform="rotate(${ang} 50 54)"><line x1="50" y1="6" x2="50" y2="20" class="needle"/></g>
       <text x="50" y="52" class="gv">${num(p, 0)}</text><text x="50" y="64" class="gu">hPa</text>
-      <text x="16" y="90" class="gu">−</text><text x="84" y="90" class="gu">+</text>
+      <svg x="11" y="81" width="10" height="10" viewBox="0 0 24 24"><path d=${mdiPath("mdi:arrow-down-thin")} class="ga"/></svg>
+      <svg x="79" y="81" width="10" height="10" viewBox="0 0 24 24"><path d=${mdiPath("mdi:arrow-up-thin")} class="ga"/></svg>
     </svg>
     <div class="txt">${trend ? html`3 Std.: ${trend} (${diff! > 0 ? "+" : ""}${num(diff, 1)} hPa)` : nothing}</div></section>`;
 }
@@ -231,8 +235,8 @@ export const tileStyles = css`
   .tiles { grid-template-columns: repeat(auto-fill, minmax(min(165px, calc(50% - 6px)), 1fr)); } /* alte Browser ohne min(): Zeile davor */
   .tile { display: flex; flex-direction: column; }
   .tile.wide2 { grid-column: span 2; }
-  .tile .val { font-size: 28px; font-weight: 600; line-height: 1.2; margin-top: 2px; }
-  .tile .lbl { font-size: 15px; font-weight: 500; }
+  .tile .val { font-size: 28px; font-weight: 500; line-height: 1.2; margin-top: 2px; }
+  .tile .lbl { font-size: 14px; font-weight: 500; }
   .tile .txt { font-size: 13px; color: var(--wa-text2); margin-top: auto; padding-top: 8px; }
   .row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--wa-divider); font-size: 14px; }
   .row:last-child { border-bottom: 0; }
@@ -243,17 +247,18 @@ export const tileStyles = css`
   .compass { width: 120px; height: 120px; flex: none; }
   .tk { stroke: var(--wa-text2); stroke-width: 1; opacity: 0.5; }
   .tk.major { stroke-width: 2; opacity: 0.9; }
-  .cl { fill: var(--wa-text2); font-size: 9px; font-weight: 600; text-anchor: middle; }
+  .cl { fill: var(--wa-text2); font-size: 9px; font-weight: 500; text-anchor: middle; }
   .arrow { stroke: var(--wa-text); stroke-width: 2.5; }
   .arrowhead { fill: var(--wa-text); }
   .hub { fill: var(--ha-card-background, var(--card-background-color, #1c1c1c)); }
-  .cv { fill: var(--wa-text); font-size: 15px; font-weight: 600; text-anchor: middle; }
+  .cv { fill: var(--wa-text); font-size: 15px; font-weight: 500; text-anchor: middle; }
   .cu { fill: var(--wa-text2); font-size: 7px; text-anchor: middle; }
 
   .gauge { width: 100%; max-width: 130px; margin: 4px auto 0; display: block; }
   .needle { stroke: var(--wa-text); stroke-width: 3.5; stroke-linecap: round; }
-  .gv { fill: var(--wa-text); font-size: 18px; font-weight: 600; text-anchor: middle; }
+  .gv { fill: var(--wa-text); font-size: 18px; font-weight: 500; text-anchor: middle; }
   .gu { fill: var(--wa-text2); font-size: 9px; text-anchor: middle; }
+  .ga { fill: var(--wa-text2); }
 
   .uvbar {
     position: relative; height: 5px; border-radius: 3px; margin-top: 10px;
@@ -268,10 +273,13 @@ export const tileStyles = css`
   .fbar::before { content: ""; position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 2px; background: var(--wa-track); }
   .fseg { position: absolute; top: 7px; height: 4px; }
   .fpill {
-    position: absolute; top: 0; padding: 0 7px; border-radius: 9px;
-    font-size: 12px; line-height: 18px; font-weight: 600; color: #10202c; white-space: nowrap;
+    position: absolute; top: 0; padding: 0 7px 0 4px; border-radius: 9px;
+    display: inline-flex; align-items: center; gap: 1px; --mdc-icon-size: 13px;
+    font-size: 12px; line-height: 18px; font-weight: 500; color: #10202c; white-space: nowrap;
   }
   .ftick { position: absolute; top: 2px; width: 3px; height: 14px; margin-left: -1.5px; border-radius: 2px; background: var(--wa-text); }
+  /* Zeilen unten bündig wie der Text der Nachbarkacheln */
+  .rows.bottom { margin-top: auto; padding-top: 8px; }
   .hbar { height: 5px; border-radius: 3px; margin-top: 10px; background: var(--wa-track); overflow: hidden; }
   .hbar i { display: block; height: 100%; border-radius: 3px; background: var(--wa-rain); }
 

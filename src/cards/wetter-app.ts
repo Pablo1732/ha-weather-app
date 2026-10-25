@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { icon } from "../util/mdi";
 import { ForecastController } from "../data/forecast";
 import { fetchUntilNow, joinStats } from "../data/statistics";
 import { cardStyles, head } from "../components/styles";
@@ -244,7 +245,7 @@ export class WetterApp extends LitElement {
           ${(["forecast", "history"] as Tab[]).map((t) => html`
             <button role="tab" aria-selected=${this._tab === t} class=${this._tab === t ? "on" : ""}
               @click=${() => { this._tab = t; this._detail = undefined; }}>
-              <ha-icon icon=${t === "forecast" ? "mdi:calendar-arrow-right" : "mdi:chart-line"}></ha-icon>
+              ${icon(t === "forecast" ? "mdi:calendar-arrow-right" : "mdi:chart-line")}
               ${t === "forecast" ? "Vorhersage" : "Historie"}
             </button>`)}
         </nav>
@@ -281,7 +282,7 @@ export class WetterApp extends LitElement {
           <div class="hr" @click=${() => this.openDetail(this.dayIndex(f.datetime), "temp")}>
             <div class="t">${i === 0 ? "Jetzt" : hour(new Date(f.datetime))}</div>
             ${weatherIcon(f.condition, i === 0 ? night : f.is_daytime === false)}
-            <div class="p">${(f.precipitation_probability ?? 0) >= 20 ? `${Math.round(f.precipitation_probability!)} %` : ""}</div>
+            <div class="p">${(f.precipitation_probability ?? 0) >= 30 ? `${Math.round(f.precipitation_probability!)} %` : ""}</div>
             <div class="v">${temp(i === 0 ? nowTemp ?? f.temperature : blend(new Date(f.datetime).getTime(), f.temperature))}</div>
           </div>`)}
       </div>
@@ -309,7 +310,7 @@ export class WetterApp extends LitElement {
             <div class="wd">${weekday(new Date(d.datetime))}</div>
             <div class="ic">
               ${weatherIcon(d.condition)}
-              ${(d.precipitation_probability ?? 0) >= 20 ? html`<span class="p">${Math.round(d.precipitation_probability!)} %</span>` : nothing}
+              ${(d.precipitation_probability ?? 0) >= 30 ? html`<span class="p">${Math.round(d.precipitation_probability!)} %</span>` : nothing}
             </div>
             <div class="lo">${temp(l)}</div>
             <div class="bar">
@@ -352,10 +353,10 @@ export class WetterApp extends LitElement {
       }
 
       header { text-align: center; padding: 8px 0 12px; }
-      .place { font-size: 28px; font-weight: 500; }
-      .now { font-size: 88px; font-weight: 600; line-height: 1; margin: 2px 0 4px 20px; }
+      .place { font-size: 24px; font-weight: 400; }
+      .now { font-size: 88px; font-weight: 300; line-height: 1; margin: 2px 0 4px 20px; }
       .cond { font-size: 20px; font-weight: 500; }
-      .hl { font-size: 17px; font-weight: 500; white-space: pre; }
+      .hl { font-size: 16px; white-space: pre; }
 
       /* Breit, aber niedrig (Echo Show 960×480, Handy quer, kleine Tablets): Kopf kompakt in einer Zeile
          statt halbe Bildschirmhöhe — Temperatur links, Ort/Wetter/H-T rechts daneben */
@@ -366,7 +367,7 @@ export class WetterApp extends LitElement {
         }
         header > :not(.now) { grid-column: 2; }
         .now { grid-column: 1; grid-row: 1 / span 3; font-size: 64px; margin: 0; }
-        .place { font-size: 20px; }
+        .place { font-size: 18px; }
         .cond { font-size: 16px; }
         .hl { font-size: 14px; }
         .app.page { padding-top: 10px; }
@@ -385,7 +386,7 @@ export class WetterApp extends LitElement {
         border: 0; background: none; color: var(--wa-text2); font: inherit; font-size: 14px; font-weight: 500;
         padding: 12px 8px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
       }
-      .tabs button ha-icon { --mdc-icon-size: 20px; }
+      .tabs button .mdi { --mdc-icon-size: 20px; }
       .tabs button.on { color: var(--wa-accent); border-bottom-color: var(--wa-accent); }
 
       main { display: flex; flex-direction: column; gap: 12px; }

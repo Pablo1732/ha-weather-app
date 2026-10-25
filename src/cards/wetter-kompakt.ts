@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { icon } from "../util/mdi";
 import { ForecastController } from "../data/forecast";
 import { fetchStatistics } from "../data/statistics";
 import { cardStyles } from "../components/styles";
@@ -36,6 +37,7 @@ export class WetterKompakt extends LitElement {
     _m: { state: true },
     _cols: { state: true },
     _detail: { state: true },
+    _short: { state: true },
   };
 
   hass?: HomeAssistant;
@@ -49,6 +51,8 @@ export class WetterKompakt extends LitElement {
   private _detail?: number;
   private _detailEl?: HTMLElement & Record<string, unknown>;
   private _shown?: ShownDay;
+  /** Böen ohne Einheit, weil sie mit „km/h“ nicht in die Kachel passen (wird nach jedem Größenwechsel neu gemessen) */
+  private _short = false;
 
   private hourly = new ForecastController(this, "hourly", () => this._config?.weather);
   private daily = new ForecastController(this, "daily", () => this._config?.weather);
@@ -75,6 +79,9 @@ export class WetterKompakt extends LitElement {
     this._ro ??= new ResizeObserver((e) => {
       const n = Math.max(5, Math.min(10, Math.floor(e[0].contentRect.width / 58)));
       if (n !== this._cols) this._cols = n;
+      // neu messen, ob die Böen mit Einheit passen
+      this._short = false;
+      this.requestUpdate();
     });
     this._ro.observe(this);
   }
@@ -99,6 +106,8 @@ export class WetterKompakt extends LitElement {
   }
 
   protected updated(): void {
+    const gust = this.renderRoot.querySelector(".gust");
+    if (!this._short && gust && gust.scrollWidth > gust.clientWidth) this._short = true;
     this.load();
     this.syncDetail();
   }
@@ -208,15 +217,14 @@ export class WetterKompakt extends LitElement {
             <span>${this._config.name ?? ""}</span>
           </div>
           <div class="hl">
-            ${today ? html`<div>H: ${temp(today.temperature)}  T: ${temp(today.templow)}</div>` : nothing}
+            ${today ? html`<div>H: ${temp(today.temperature)} · T: ${temp(today.templow)}</div>` : nothing}
             ${feels != null ? html`<div class="sub">Gefühlt ${temp(feels)}</div>` : nothing}
           </div>
         </div>
         ${this._config.forecast === "hours" ? this.renderHours(nowTemp, night) : this.renderPeriods(daily)}
-        ${daily ? this.renderDays(daily.slice(1, 4)) : nothing}
-        ${this.renderStats()}
+        ${this.renderTiles(daily?.slice(1, 4) ?? [])}
         ${this._config.navigation_path && this._config.open_button ? html`<button class="open" @click=${() => this.open()}>
-          <ha-icon icon="mdi:weather-partly-cloudy"></ha-icon>Wetter-App öffnen<ha-icon icon="mdi:chevron-right"></ha-icon></button>` : nothing}
+          ${icon("mdi:weather-partly-cloudy")}Wetter-App öffnen${icon("mdi:chevron-right")}</button>` : nothing}
       </div>
     `;
   }
@@ -243,106 +251,110 @@ export class WetterKompakt extends LitElement {
     </div>`;
   }
 
-  /** Nächste vier Tagesabschnitte (Vormittag/Nachmittag/Abend/Nacht) statt einzelner Stunden */
+  /** Nächste vier Tagesabschnitte statt einzelner Stunden; Temperatur wie bei den Tagen als Hoch / Tief */
   private renderPeriods(daily: ForecastItem[] | undefined) {
     const fc = this.hourly.forecast;
     if (!fc) return html`<div class="loading">Lade Vorhersage …</div>`;
     const list = periods(fc, Date.now(), daily);
     if (!list.length) return nothing;
     return html`<div class="hours" style="grid-template-columns:repeat(${list.length}, minmax(0, 1fr))">
-      ${list.map((p) => html`<div class="hr t-able" @click=${this.tap(`day:${this.dayOf(p.start)}:temp`)}>
-        <div class="lab">${p.label}<small>${p.sub ?? " "}</small></div>
+      ${list.map((p, i) => html`<div class="hr t-able" @click=${this.tap(`day:${this.dayOf(p.start)}:temp`)}>
+        <div class="lab">${i === 0 ? "Jetzt" : p.label}</div>
         ${weatherIcon(p.condition, p.night)}
         <div class="p">${prob(p.prob)}</div>
-        <div class="v">${p.lo == null ? "–" : Math.round(p.lo) === Math.round(p.hi!) ? temp(p.hi) : `${num(p.lo, 0)}–${temp(p.hi)}`}</div>
+        <div class="v">${hiLo(p.hi, p.lo)}</div>
       </div>`)}
     </div>`;
   }
 
-  private renderDays(days: ForecastItem[]) {
-    if (!days.length) return nothing;
-    return html`<div class="days">
-      ${days.map((d, i) => html`<div class="day t-able" @click=${this.tap(`day:${i + 1}:temp`)}>
-        <div class="top"><span class="wd">${weekday(new Date(d.datetime))}</span>${weatherIcon(d.condition)}
-          <span class="p">${prob(d.precipitation_probability)}</span></div>
-        <div class="tt"><span class="lo">${temp(d.templow)}</span> / <span class="hi">${temp(d.temperature)}</span></div>
-      </div>`)}
-    </div>`;
+  /** Tage und Messwerte in einem Raster (gleiche Abstände waagrecht und senkrecht), gleicher Aufbau: Bezeichnung, Wert, Zusatz */
+  private renderTiles(days: ForecastItem[]) {
+    const tiles = [...this.dayTiles(days), ...this.statTiles()];
+    return tiles.length ? html`<div class="tiles">${tiles}</div>` : nothing;
   }
 
-  private renderStats() {
+  private dayTiles(days: ForecastItem[]) {
+    return days.map((d, i) => html`<div class="tile t-able" @click=${this.tap(`day:${i + 1}:temp`)}>
+        <div class="th"><span>${weekday(new Date(d.datetime))}</span>${weatherIcon(d.condition)}</div>
+        <b>${hiLo(d.temperature, d.templow)}</b>
+        <small class="rain">${prob(d.precipitation_probability) && `${prob(d.precipitation_probability)} Regen`}</small>
+      </div>`);
+  }
+
+  private statTiles() {
     const s = this._config.sensors ?? {};
     const m = this._m;
     const rate = stateNum(this.hass, s.rain_rate);
     const wind = stateNum(this.hass, s.wind_speed);
     const dir = stateNum(this.hass, s.wind_direction);
-    const tiles = [
-      s.rain_total && html`<div class="st t-able" @click=${this.tap("history:day")}><span>Regen heute</span><b>${num(m.rainToday, 1)} l/m²</b>
+    return [
+      s.rain_total && html`<div class="tile t-able" @click=${this.tap("history:day")}><div class="th"><span>Regen heute</span></div><b>${num(m.rainToday, 1)} l/m²</b>
         <small>${rate ? `jetzt ${num(rate, 1)} l/m²/h` : "seit 0 Uhr"}</small></div>`,
-      s.rain_total && html`<div class="st t-able" @click=${this.tap("history:7d")}><span>Regen 7 Tage</span><b>${num(m.rain7, 1)} l/m²</b>
-        <small>seit ${weekday(new Date(Date.now() - 6 * DAY))} 0 Uhr</small></div>`,
-      s.wind_speed && html`<div class="st t-able" @click=${this.tap("history:day")}><span>Wind</span><b>${num(wind, 0)} km/h ${dir != null ? compass(dir) : ""}</b>
-        <small>${m.gustMax != null ? `Böen ${num(m.gustMax, 0)} km/h` : ""}</small></div>`,
+      s.rain_total && html`<div class="tile t-able" @click=${this.tap("history:7d")}><div class="th"><span>Regen 7 Tage</span></div><b>${num(m.rain7, 1)} l/m²</b>
+        <small>seit ${weekday(new Date(Date.now() - 6 * DAY))}</small></div>`,
+      s.wind_speed && html`<div class="tile t-able" @click=${this.tap("history:day")}><div class="th"><span>Wind</span></div><b>${num(wind, 0)} km/h ${dir != null ? compass(dir) : ""}</b>
+        <small class="gust">${m.gustMax != null ? `Böen ${num(m.gustMax, 0)}${this._short ? "" : " km/h"}` : ""}</small></div>`,
     ].filter(Boolean);
-    return tiles.length ? html`<div class="stats">${tiles}</div>` : nothing;
   }
 
   static styles = [
     cardStyles,
     css`
       :host { display: block; }
-      .card { display: flex; flex-direction: column; gap: 10px; }
+      /* Maße wie HA-Kacheln, Schrift 14/12, Gewichte 400/500 */
+      .card { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+      /* Abstände: 12 zwischen Bereichen, 8 zwischen Kacheln (waagrecht = senkrecht), 8 in der Kachel */
       .warn, .loading { color: var(--wa-text2); font-size: 14px; padding: 8px 0; }
-      .now { display: flex; align-items: center; gap: 10px; }
+      .now { display: flex; align-items: center; gap: 8px; }
       /* antippbare Bereiche: Zeiger + kurzes Abdunkeln beim Tippen */
       .taps .t-able { cursor: pointer; border-radius: 10px; -webkit-tap-highlight-color: transparent; }
       .taps .t-able:active { background: rgba(127, 127, 127, 0.18); }
-      .taps .st.t-able:active, .taps .day.t-able:active { background: rgba(127, 127, 127, 0.22); }
+      .taps .tile.t-able:active { background: rgba(127, 127, 127, 0.2); }
       .now .ic .wicon { width: 48px; height: 48px; }
-      .now .t { font-size: 40px; font-weight: 600; line-height: 1; }
+      .now .t { font-size: 40px; font-weight: 400; line-height: 1; }
       .info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-      .info b { font-size: 16px; font-weight: 500; }
-      .info span, .sub { font-size: 13px; color: var(--wa-text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .hl { text-align: right; font-size: 14px; font-weight: 500; white-space: nowrap; }
+      .info b { font-size: 16px; line-height: 22px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .info span, .sub { font-size: 14px; line-height: 20px; color: var(--wa-text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .hl { text-align: right; font-size: 14px; line-height: 22px; white-space: nowrap; }
 
-      .hours { display: grid; gap: 2px; border-top: 1px solid var(--wa-divider); padding-top: 8px; }
-      .hr { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
-      .hr .lab { font-size: 12px; color: var(--wa-text2); text-align: center; line-height: 1.25; white-space: nowrap; }
-      .hr .lab small { display: block; font-size: 11px; opacity: 0.8; }
+      .hours { display: grid; gap: 2px; }
+      .hr { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 2px 0; }
+      .hr .lab { font-size: 12px; color: var(--wa-text2); white-space: nowrap; }
       .hr .wicon { width: 28px; height: 28px; }
-      .p { font-size: 11px; color: var(--wa-rain); font-weight: 500; min-height: 13px; line-height: 13px; }
-      .hr .v { font-size: 15px; font-weight: 500; }
+      .p { font-size: 12px; color: var(--wa-rain); min-height: 14px; line-height: 14px; }
+      .hr .v { font-size: 14px; font-weight: 500; white-space: nowrap; }
+      .lo { font-weight: 400; color: var(--wa-text2); }
 
-      .days { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-      .day {
-        display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0;
-        padding: 6px 4px; border-radius: 10px; background: rgba(127, 127, 127, 0.1); font-size: 14px;
+      /* Tage und Messwerte: gleicher Aufbau, gleiche Fläche */
+      .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+      .tile {
+        display: flex; flex-direction: column; min-width: 0; padding: 8px 4px 8px 8px;
+        border-radius: 12px; background: rgba(127, 127, 127, 0.08);
       }
-      .day .top { display: flex; align-items: center; gap: 6px; }
-      .day .wd { font-weight: 500; }
-      .day .wicon { width: 24px; height: 24px; }
-      .day .p { min-height: 0; white-space: nowrap; }
-      .day .tt { color: var(--wa-text2); white-space: nowrap; }
-      .day .hi { color: var(--wa-text); font-weight: 500; }
-
-      .stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; }
-      .st { display: flex; flex-direction: column; padding: 6px 6px 6px 8px; border-radius: 10px; background: rgba(127, 127, 127, 0.1); min-width: 0; }
-      .st span, .st small { font-size: 12px; color: var(--wa-text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .st b { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .tile .th { display: flex; align-items: center; justify-content: space-between; gap: 4px; height: 20px; }
+      .tile .th .wicon { width: 20px; height: 20px; flex: none; }
+      .tile .th span, .tile small { font-size: 12px; color: var(--wa-text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .tile b { font-size: 14px; line-height: 20px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .tile small { min-height: 16px; line-height: 16px; }
+      .tile .rain { color: var(--wa-rain); }
 
       .open {
         display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
         border: 0; border-radius: 10px; padding: 10px; cursor: pointer; font: inherit; font-size: 14px; font-weight: 500;
         color: var(--wa-accent); background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.14);
       }
-      .open ha-icon { --mdc-icon-size: 18px; }
+      .open .mdi { --mdc-icon-size: 18px; }
     `,
   ];
 }
 
-const prob = (p: number | undefined) => ((p ?? 0) >= 20 ? `${Math.round(p!)} %` : "");
+/** „10° / 3°“, Tiefwert grau; gleiche Werte nur einmal */
+const hiLo = (hi: number | undefined, lo: number | undefined) =>
+  hi == null ? "–" : lo == null || Math.round(lo) === Math.round(hi) ? temp(hi) : html`${temp(hi)}<span class="lo"> / ${temp(lo)}</span>`;
 
-interface Period { start: number; label: string; sub?: string; condition?: string; night: boolean; prob?: number; lo?: number; hi?: number }
+const prob = (p: number | undefined) => ((p ?? 0) >= 30 ? `${Math.round(p!)} %` : "");
+
+interface Period { start: number; label: string; condition?: string; night: boolean; prob?: number; lo?: number; hi?: number }
 
 const BLOCKS: Record<number, string> = { 0: "Nacht", 6: "Vormittag", 12: "Nachmittag", 18: "Abend" };
 // je weiter vorne, desto „wichtiger“ fürs Symbol eines Abschnitts
@@ -351,12 +363,11 @@ const SEVERITY = ["lightning-rainy", "lightning", "hail", "pouring", "snowy-rain
 /**
  * Stundenvorhersage → die nächsten vier 6-Stunden-Abschnitte ab dem laufenden.
  * Symbol: das „schlimmste“ Wetter, das mind. ein Drittel des Abschnitts ausmacht, sonst das häufigste.
- * Laufender Abschnitt nur ab jetzt; Temperatur als Spanne, Regen als höchste Wahrscheinlichkeit.
+ * Laufender Abschnitt nur ab jetzt; Regen als höchste Wahrscheinlichkeit.
  */
 function periods(fc: ForecastItem[], now: number, daily: ForecastItem[] | undefined): Period[] {
   const d = new Date(now);
   const first = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(d.getHours() / 6) * 6).getTime();
-  const today = new Date(now).setHours(0, 0, 0, 0);
   const out: Period[] = [];
   for (let k = 0; k < 4; k++) {
     // über Zeitumstellungen hinweg sauber: Stunde per Date setzen statt +6 h rechnen
@@ -371,12 +382,9 @@ function periods(fc: ForecastItem[], now: number, daily: ForecastItem[] | undefi
     const common = [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
     const temps = hrs.map((h) => h.temperature).filter((v): v is number => v != null);
     const h0 = s.getHours();
-    // Nacht 0–6 Uhr gehört zum Abend davor → „morgen“ erst ab dem Vormittag des nächsten Tages
-    const tomorrow = new Date(s).setHours(0, 0, 0, 0) > today && h0 !== 0;
     out.push({
       start: s.getTime(),
       label: BLOCKS[h0] ?? `${h0} Uhr`,
-      sub: k === 0 ? "jetzt" : tomorrow ? "morgen" : undefined,
       condition: severe ?? common ?? daily?.[0]?.condition,
       night: hrs.filter((h) => h.is_daytime === false).length > hrs.length / 2,
       prob: Math.max(0, ...hrs.map((h) => h.precipitation_probability ?? 0)),

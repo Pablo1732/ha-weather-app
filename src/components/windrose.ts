@@ -41,11 +41,9 @@ function shares(r: StatValue): [number, number][] {
   return [[c, 1 - tail] as [number, number], ...p.map((v, k) => [k, v] as [number, number]).filter(([k, v]) => k >= TAIL && v > 0)];
 }
 
-export interface WindNow { direction?: number; speed?: number }
-export interface RoseOpts { now?: WindNow; selected?: number; up?: boolean; onSelect?: (i: number | undefined, up?: boolean) => void }
+export interface RoseOpts { selected?: number; up?: boolean; onSelect?: (i: number | undefined, up?: boolean) => void }
 
 export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[] = [], o: RoseOpts = {}) {
-  const now = o.now ?? {};
   const speedAt = new Map(speedRows.map((r) => [r.start, r]));
   const counts = DIRS.map(() => BFT.map(() => 0)); // [Richtung][Stufe], Stufe 0 bleibt leer
   const totals = BFT.map(() => 0);
@@ -100,24 +98,12 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
     });
   });
   const ticks = DIRS.map((_, i) => i % 4 === 0 ? svg`` : svg`<text x=${100 + 109 * Math.cos(ang(i * 22.5))} y=${103 + 109 * Math.sin(ang(i * 22.5))} class=${i % 2 ? "cd2" : "cd"}>${DIRS[i]}</text>`);
-  // aktuelle Richtung: roter Pfeil am Rand, zeigt nach innen (Wind kommt aus dieser Richtung)
-  const dirArrow = now.direction != null
-    ? svg`<path d="M100 ${100 - R - 1} l-5 -9 h10z" class="now" transform="rotate(${now.direction} 100 100)"><title>Aktuell: ${Math.round(now.direction)}°</title></path>`
-    : svg``;
-
-  // Beaufort-Leiste: nur Stufen, die im Zeitraum vorkamen (+ die aktuelle)
-  const nowCls = now.speed != null ? bftOf(now.speed) : -1;
+  // Beaufort-Leiste: nur Stufen, die im Zeitraum vorkamen
   // Breite nach Anteil, mit Mindestbreite, damit seltene Stufen lesbar und antippbar bleiben
   const shown = BFT.map((b, i) => ({ ...b, i, share: pct(totals[i]), w: Math.max(pct(totals[i]), 9) }))
-    .filter((b) => totals[b.i] > 0 || b.i === nowCls);
+    .filter((b) => totals[b.i] > 0);
   const wSum = shown.reduce((a, b) => a + b.w, 0);
   const startOf = (k: number) => shown.slice(0, k).reduce((a, b) => a + b.w, 0) / wSum * 100;
-  let nowPos: number | undefined;
-  const ni = shown.findIndex((b) => b.i === nowCls);
-  if (ni >= 0) {
-    const b = shown[ni], hi = Number.isFinite(b.max) ? b.max : b.min + 20;
-    nowPos = startOf(ni) + Math.min(1, (now.speed! - b.min) / (hi - b.min)) * (b.w / wSum) * 100;
-  }
   // Prozent nur ins Feld schreiben, wenn es reinpasst (Leiste ≈ 300 px, ~6 px je Zeichen) — sonst steht's im Detail
   const fits = (b: { w: number }, text: string) => (b.w / wSum) * 300 >= text.length * 6 + 6;
   // Detail am Rand nicht abschneiden: links bündig am linken, rechts bündig am rechten Ende, dazwischen gleitend
@@ -145,10 +131,8 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
         <text x="100" y="-6" class="cd">N</text><text x="100" y="216" class="cd">S</text>
         <text x="211" y="103" class="cd">O</text><text x="-11" y="103" class="cd">W</text>
         ${ticks}
-        ${dirArrow}
       </svg>
       <div class="bftbar">
-        ${nowPos != null ? html`<span class="nowsp" style="left:${nowPos}%" title="Aktuell: ${num(now.speed, 1)} km/h"></span>` : ""}
         ${sel && si >= 0 ? html`<div class="btip ${o.up ? "up" : ""}" style=${tipStyle(startOf(si) + (shown[si].w / wSum) * 50)}>
           <div class="tr"><i style="background:${sel.color}"></i><b>Beaufort ${sel.label}</b></div>
           <div class="tr"><span>${sel.name}</span></div>
@@ -172,13 +156,12 @@ export const windroseStyles = css`
     fill: var(--wa-text); font-size: 6.5px; font-weight: 500; text-anchor: middle;
     paint-order: stroke; stroke: var(--ha-card-background, var(--card-background-color, #1c1c1c)); stroke-width: 2.2px;
   }
-  .cv { fill: #fff; font-size: 9px; font-weight: 600; text-anchor: middle; }
-  .cd { fill: var(--wa-text); font-size: 10px; font-weight: 600; text-anchor: middle; }
+  .cv { fill: #fff; font-size: 9px; font-weight: 500; text-anchor: middle; }
+  .cd { fill: var(--wa-text); font-size: 10px; font-weight: 500; text-anchor: middle; }
   .cd2 { fill: var(--wa-text2); font-size: 6.5px; text-anchor: middle; }
-  .now { fill: #e53935; }
   .bftbar { position: relative; width: 100%; max-width: 360px; padding-top: 10px; }
   .segs { display: flex; height: 20px; border-radius: 4px; overflow: hidden; }
-  .segs button { min-width: 0; overflow: hidden; border: 0; padding: 0; font: inherit; font-size: 10px; font-weight: 600; line-height: 20px; cursor: pointer; }
+  .segs button { min-width: 0; overflow: hidden; border: 0; padding: 0; font: inherit; font-size: 10px; font-weight: 500; line-height: 20px; cursor: pointer; }
   .segs button.on { box-shadow: inset 0 0 0 2px var(--wa-text); }
   .nums { display: flex; font-size: 11px; color: var(--wa-text2); margin-top: 2px; }
   .nums span { min-width: 0; text-align: center; cursor: pointer; }
@@ -193,7 +176,5 @@ export const windroseStyles = css`
   .btip .tr { display: flex; align-items: center; gap: 6px; }
   .btip .tr i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
   .btip .tr span { color: var(--secondary-text-color); flex: 1; }
-  .btip .tr b { font-weight: 600; }
-  .nowsp { position: absolute; top: 0; width: 0; height: 0; margin-left: -6px;
-    border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 9px solid #e53935; }
+  .btip .tr b { font-weight: 500; }
 `;

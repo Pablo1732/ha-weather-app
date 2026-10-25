@@ -3,7 +3,7 @@ import { isPreset, type TimeRange } from "../data/range";
 import { RangeController } from "../data/range-sync";
 import { fetchStatistics } from "../data/statistics";
 import type { HomeAssistant, StatPeriod, StatResult, StatValue, WetterConfig } from "../types";
-import { num, rain, stateNum, temp } from "../util/format";
+import { num, rain, temp } from "../util/format";
 import type { ChartSeries, ChartTick } from "./chart";
 import { rangeStyles, renderRangeSelector } from "./range-selector";
 import { cardStyles, head, legend, legendStyles } from "./styles";
@@ -192,7 +192,9 @@ export class WetterHistory extends LitElement {
     return (t: number) => {
       const d = new Date(t);
       if (r.preset === "year" && period !== "hour") return `${MONTHS_LONG[d.getMonth()]}`;
-      if (period === "hour") return `${WD[d.getDay()]} ${String(d.getHours()).padStart(2, "0")}:00`;
+      const hh = `${String(d.getHours()).padStart(2, "0")}:00`;
+      // „Tag“ zeigt nur einen Tag → Wochentag wäre doppelt
+      if (period === "hour") return r.preset === "day" ? hh : `${WD[d.getDay()]} ${hh}`;
       return `${WD[d.getDay()]}, ${d.getDate()}.${d.getMonth() + 1}.`;
     };
   }
@@ -215,9 +217,11 @@ export class WetterHistory extends LitElement {
     const rainRows = this.inRange(d.rain, s.rain_total, r);
     const rainSum = rainRows.reduce((a, x) => a + (x.change ?? 0), 0);
     const wet = rainRows.filter((x) => (x.change ?? 0) >= RAIN_DAY).length;
+    const humRows = this.inRange(d.main, s.humidity, r);
+    const humHi = extreme(humRows, "max", Math.max), humLo = extreme(humRows, "min", Math.min);
     const gust = extreme(this.inRange(d.main, s.wind_gust, r), "max", Math.max);
     const wind = avg(this.inRange(d.main, s.wind_speed, r).map((x) => x.mean));
-    const hum = avg(this.inRange(d.main, s.humidity, r).map((x) => x.mean));
+    const hum = avg(humRows.map((x) => x.mean));
     const when = this.fmt({ ...r, preset: r.preset === "year" ? "30d" : r.preset }, p.main);
     return html`<div class="grid">
       <section class="card kv">${head("mdi:thermometer", "Temperatur")}
@@ -235,6 +239,8 @@ export class WetterHistory extends LitElement {
       </section>
       <section class="card kv">${head("mdi:water-percent", "Luftfeuchte")}
         <div class="big">${num(hum, 0)} %</div><div class="sub">Durchschnitt</div>
+        <div class="ext"><span>▲ ${num(humHi?.v, 0)} %</span><small>${humHi ? when(humHi.t) : ""}</small></div>
+        <div class="ext"><span>▼ ${num(humLo?.v, 0)} %</span><small>${humLo ? when(humLo.t) : ""}</small></div>
       </section>
     </div>`;
   }
@@ -253,7 +259,7 @@ export class WetterHistory extends LitElement {
     series.push({ type: "line", points: rows.map((x) => ({ t: center(x), v: x.mean })), color: "var(--wa-temp-line, #ffb74d)", label: "Ø", unit: "°", digits: 1 });
     return html`<section class="card">${head("mdi:thermometer", "Temperatur")}
       ${this.chart(r, series, { yUnit: "°", period: p.main })}
-      ${legend([{ color: "#4fc3f7", label: "Min–Max" }, { color: "#ffb74d", label: "Durchschnitt", kind: "line" }])}
+      ${legend([{ color: "#4fc3f7", label: "Min–Max", opacity: p.main === "hour" ? 0.28 : 0.55 }, { color: "#ffb74d", label: "Durchschnitt", kind: "line" }])}
     </section>`;
   }
 
@@ -271,13 +277,13 @@ export class WetterHistory extends LitElement {
     const sumRows = rows.slice(Math.max(0, rows.findIndex((x) => x.change != null)));
     const series: ChartSeries[] = [
       { type: "bar", points: rows.map((x) => ({ t: x.start, t2: x.end, v: x.change ?? 0 })), color: "var(--wa-rain)", label: "Menge", unit: " l/m²", digits: 1 },
-      { type: "line", axis: "right", points: sumRows.length ? [{ t: Math.max(sumRows[0].start, r.start.getTime()), v: 0 }, ...cumul(sumRows)] : [], color: "var(--wa-prob, #90caf9)", label: "Summe", unit: " l/m²", digits: 1 },
+      { type: "line", axis: "right", points: sumRows.length ? [{ t: Math.max(sumRows[0].start, r.start.getTime()), v: 0 }, ...cumul(sumRows)] : [], color: "var(--wa-prob, #90caf9)", label: "Summe", unit: " l/m²", digits: 1, endLabel: true },
     ];
     return html`<section class="card">${head("mdi:weather-pouring", "Niederschlag")}
       ${this.chart(r, series, { yMin: 0, period: p.rain })}
       ${legend([
         { color: "var(--wa-rain)", label: p.rain === "hour" ? "pro Stunde" : r.preset === "year" ? "pro Monat" : "pro Tag" },
-        { color: "var(--wa-prob, #90caf9)", label: "Summe (blaue Skala links)", kind: "line" },
+        { color: "var(--wa-prob, #90caf9)", label: "Summe", kind: "line" },
       ])}
     </section>`;
   }
@@ -297,7 +303,6 @@ export class WetterHistory extends LitElement {
     ];
     return html`<section class="card">${head("mdi:weather-windy", "Wind")}
       ${s.wind_direction ? renderWindrose(dirRows, speedForRose, {
-        now: r.live ? { direction: stateNum(this.hass, s.wind_direction), speed: stateNum(this.hass, s.wind_speed) } : {},
         selected: this._bft,
         up: this._bftUp,
         onSelect: (i, up) => {
@@ -370,8 +375,10 @@ export class WetterHistory extends LitElement {
       :host([wide]) .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
       /* auto-fit: vorhandene Kacheln teilen sich die ganze Breite statt rechts eine Lücke zu lassen */
       .grid { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
-      .kv .big { font-size: 26px; font-weight: 600; margin-top: 4px; }
-      .kv .sub { font-size: 12px; color: var(--wa-text2); margin-bottom: 6px; }
+      .kv .big { font-size: 26px; font-weight: 500; margin-top: 4px; }
+      /* Detailzeilen unten bündig, auch wenn eine Kachel nur eine hat */
+      .kv { display: flex; flex-direction: column; }
+      .kv .sub { font-size: 12px; color: var(--wa-text2); padding-bottom: 6px; margin-bottom: auto; }
       .ext { display: flex; align-items: baseline; gap: 6px; font-size: 14px; flex-wrap: wrap; }
       .ext span { font-weight: 500; }
       .ext small { color: var(--wa-text2); font-size: 12px; }

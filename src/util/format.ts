@@ -9,7 +9,9 @@ export function num(v: number | null | undefined, digits = 1): string {
     f = new Intl.NumberFormat("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits });
     nf.set(digits, f);
   }
-  return f.format(v);
+  // −0,3 gerundet → „0“, nicht „-0“
+  const p = 10 ** digits;
+  return f.format(Math.round(v * p) === 0 ? 0 : v);
 }
 
 export const temp = (v: number | null | undefined, digits = 0) => (v == null ? "–" : `${num(v, digits)}°`);

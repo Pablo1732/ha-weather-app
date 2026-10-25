@@ -1,4 +1,5 @@
 import { css, html } from "lit";
+import { icon } from "../util/mdi";
 import { PRESETS } from "../data/range";
 import type { RangeController } from "../data/range-sync";
 
@@ -16,12 +17,12 @@ export function renderRangeSelector(ctrl: RangeController) {
       </div>
       <div class="nav">
         <button class="ib" aria-label="Zurück" @click=${() => ctrl.set({ preset: r.preset, offset: r.offset - 1 })}>
-          <ha-icon icon="mdi:chevron-left"></ha-icon>
+          ${icon("mdi:chevron-left")}
         </button>
         <span>${r.label}</span>
         <button class="ib" aria-label="Vor" ?disabled=${r.offset >= 0}
           @click=${() => ctrl.set({ preset: r.preset, offset: r.offset + 1 })}>
-          <ha-icon icon="mdi:chevron-right"></ha-icon>
+          ${icon("mdi:chevron-right")}
         </button>
       </div>
     </div>

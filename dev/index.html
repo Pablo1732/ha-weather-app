@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Wetter-App Testseite</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
   <style>
     /* HA-Standard-Dark-Theme nachgestellt; ?light → helles Theme */
     :root { --primary-background-color:#111111; --card-background-color:#1c1c1c; --primary-text-color:#e1e1e1;
@@ -15,6 +17,12 @@
     .page #wrap { max-width: none; padding: 0; }
     .bar { color: #aaa; font-size: 13px; padding-bottom: 8px; display: flex; gap: 12px; flex-wrap: wrap; }
     .bar label { cursor: pointer; }
+    /* Nachbau einer HA-Tile-Karte als Vergleich neben der Kompakt-Karte */
+    .ref { display: flex; flex-direction: column; gap: 8px; width: 300px; }
+    .tile { display: flex; align-items: center; gap: 10px; padding: 10px; height: 56px; box-sizing: border-box; border-radius: 12px;
+      background: var(--card-background-color); border: 1px solid var(--divider-color); color: var(--primary-text-color); }
+    .tile .chip { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(127,127,127,.2); font-size: 24px; }
+    .tile b { display: block; font-size: 14px; font-weight: 500; line-height: 20px; } .tile small { font-size: 12px; color: var(--secondary-text-color); }
   </style>
 </head>
 <body>
@@ -36,6 +44,10 @@
       <wetter-app-kompakt style="width:360px"></wetter-app-kompakt>
       <wetter-app-kompakt style="width:500px"></wetter-app-kompakt>
       <wetter-app-kompakt style="width:300px"></wetter-app-kompakt>
+      <div class="ref">
+        <div class="tile"><span class="chip"><i class="mdi mdi-lightbulb-off"></i></span><div><b>Licht</b><small>Aus</small></div></div>
+        <div class="tile"><span class="chip" style="color:#4db6ac;background:rgba(77,182,172,.2)"><i class="mdi mdi-thermostat"></i></span><div><b>Heizung</b><small>Heizbetrieb · 16 °C</small></div></div>
+      </div>
     </div>
   </div>
   <script src="audit.js"></script>

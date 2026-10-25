@@ -1,10 +1,11 @@
 import { css, html } from "lit";
+import { icon } from "../util/mdi";
 
 // Gemeinsame Optik aller Karten — ausschließlich HA-Theme-Variablen, damit es wie ein Teil von HA aussieht
 // und jedes Theme (hell/dunkel/eigene) automatisch passt.
 
-export const head = (icon: string, title: string) =>
-  html`<div class="head"><ha-icon icon=${icon}></ha-icon><span>${title}</span></div>`;
+export const head = (name: string, title: string) =>
+  html`<div class="head">${icon(name)}<span>${title}</span></div>`;
 
 /** Farben der Wettersymbole (Variablen kommen vom Karten-Host) — auch für Bausteine ohne cardStyles */
 export const iconStyles = css`
@@ -25,8 +26,8 @@ export const cardStyles = css`
     --wa-rain: var(--blue-color, #2196f3);
     --wa-track: rgba(127, 127, 127, 0.22);
     /* Icon-Farben fürs helle Theme, .dark überschreibt */
-    --wa-cloud: #b9c4cf;
-    --wa-cloud2: #93a1ae;
+    --wa-cloud: #a3afbb;
+    --wa-cloud2: #7d8b98;
     --wa-moon: #8e9bb0;
     color: var(--wa-text);
   }
@@ -35,6 +36,9 @@ export const cardStyles = css`
     --wa-cloud2: #aab4bf;
     --wa-moon: #e9edf5;
   }
+
+  /* nur zwei Schriftstärken wie in HA: 400 und 500 */
+  b { font-weight: 500; }
 
   .card {
     background: var(--ha-card-background, var(--card-background-color, #fff));
@@ -49,9 +53,9 @@ export const cardStyles = css`
   .head {
     display: flex; align-items: center; gap: 8px;
     font-size: 14px; font-weight: 500; color: var(--wa-text2);
-    padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--wa-divider);
+    margin-bottom: 6px;
   }
-  .head ha-icon { --mdc-icon-size: 18px; color: var(--state-icon-color, var(--wa-text2)); flex: none; }
+  .head .mdi { --mdc-icon-size: 18px; color: var(--state-icon-color, var(--wa-text2)); flex: none; }
   /* lange Titel in schmalen Kacheln (z. B. „Sonnenuntergang“) kürzen statt über den Rand laufen */
   .head span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
