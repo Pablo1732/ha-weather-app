@@ -6,7 +6,7 @@ import { fetchStatistics } from "../data/statistics";
 import { rangeStyles, renderRangeSelector } from "../components/range-selector";
 import { cardStyles, head } from "../components/styles";
 import type { ForecastItem, HomeAssistant, StatResult, WetterConfig } from "../types";
-import { conditionLabel } from "../util/conditions";
+import { conditionLabel, tint } from "../util/conditions";
 import { hour, num, rain, stateNum, temp, weekday } from "../util/format";
 import { weatherIcon } from "../util/icons";
 
@@ -125,18 +125,14 @@ export class WetterApp extends LitElement {
     const today = this.daily.forecast?.[0];
 
     return html`
-      <div class="app ${this._wide ? "wide" : ""} ${this.hass.themes?.darkMode ? "dark" : ""}">
-        <section class="card hero">
-          <div class="hero-main">
-            <div class="hero-icon">${weatherIcon(w.state, night)}</div>
-            <div class="hero-temp">${temp(nowTemp)}</div>
-          </div>
-          <div class="hero-info">
-            ${this._config.name ? html`<div class="place">${this._config.name}</div>` : nothing}
-            <div class="cond">${conditionLabel(w.state)}</div>
-            ${today ? html`<div class="hl">H: ${temp(today.temperature)} · T: ${temp(today.templow)}</div>` : nothing}
-          </div>
-        </section>
+      <div class="app ${this._wide ? "wide" : ""} ${this.hass.themes?.darkMode ? "dark" : ""} ${this._config.layout === "page" ? "page" : ""}"
+        style="--wa-tint:${tint(w.state, night)}">
+        <header>
+          ${this._config.name ? html`<div class="place">${this._config.name}</div>` : nothing}
+          <div class="now">${temp(nowTemp)}</div>
+          <div class="cond">${conditionLabel(w.state)}</div>
+          ${today ? html`<div class="hl">H: ${temp(today.temperature)}  T: ${temp(today.templow)}</div>` : nothing}
+        </header>
 
         <nav class="tabs" role="tablist">
           ${(["forecast", "history"] as Tab[]).map((t) => html`
@@ -269,19 +265,21 @@ export class WetterApp extends LitElement {
     rangeStyles,
     css`
       :host { display: block; }
+      /* Dezenter Wetter-Farbton oben, läuft in den Theme-Hintergrund aus */
       .app {
-        padding: 8px; box-sizing: border-box; max-width: 1100px; margin: 0 auto;
-        display: flex; flex-direction: column; gap: 12px;
+        box-sizing: border-box; padding: 16px 12px; display: flex; flex-direction: column; gap: 12px;
+        border-radius: var(--ha-card-border-radius, 12px);
+        background: linear-gradient(180deg, var(--wa-tint) 0, transparent 520px), var(--primary-background-color, #111);
       }
+      .app > * { width: 100%; max-width: 1100px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+      /* Ganzseiten-Modus (Panel-Ansicht): ganze Fläche, keine Rundung */
+      .app.page { border-radius: 0; min-height: calc(100vh - var(--header-height, 56px)); padding: 24px 16px; }
 
-      .hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; }
-      .hero-main { display: flex; align-items: center; gap: 12px; }
-      .hero-icon .wicon { width: 72px; height: 72px; }
-      .hero-temp { font-size: 56px; font-weight: 300; line-height: 1; }
-      .hero-info { text-align: right; min-width: 0; }
-      .place { font-size: 20px; font-weight: 500; }
-      .cond { font-size: 16px; color: var(--wa-text2); }
-      .hl { font-size: 14px; color: var(--wa-text2); margin-top: 2px; }
+      header { text-align: center; padding: 8px 0 12px; }
+      .place { font-size: 28px; font-weight: 500; }
+      .now { font-size: 88px; font-weight: 200; line-height: 1; margin: 2px 0 4px 20px; }
+      .cond { font-size: 20px; font-weight: 500; }
+      .hl { font-size: 17px; font-weight: 500; white-space: pre; }
 
       /* Tabs im Stil der HA-Oberfläche: Text + Unterstrich in Primärfarbe */
       .tabs { display: flex; border-bottom: 1px solid var(--wa-divider); }

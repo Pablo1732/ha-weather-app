@@ -84,6 +84,8 @@ export interface WetterConfig {
   /** Karten mit gleicher Gruppe teilen sich den Historie-Zeitraum. */
   sync_group?: string;
   default_range?: string;
+  /** `page` = ganze Fläche ohne Rundung (für Panel-Ansicht), sonst normale Karte */
+  layout?: "card" | "page";
   /** Regen-/Schnee-Animation im Hintergrund */
   animations?: boolean;
 }

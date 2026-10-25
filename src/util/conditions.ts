@@ -22,6 +22,21 @@ export function conditionLabel(c: string | undefined): string {
   return (c && LABELS[c]) || "–";
 }
 
+// Farbton (RGB) je Wetterlage — nur halbtransparent über dem Theme-Hintergrund, daher dezent
+const TINT_DAY: Record<string, string> = {
+  sunny: "47,128,237", partlycloudy: "70,130,200", cloudy: "120,135,150", "windy-variant": "120,135,150",
+  rainy: "80,105,135", pouring: "70,90,120", hail: "90,100,125", snowy: "160,180,205", "snowy-rainy": "130,150,175",
+  fog: "150,155,160", lightning: "85,80,125", "lightning-rainy": "85,80,125", exceptional: "150,70,70", windy: "100,140,170",
+};
+const TINT_NIGHT = "35,50,100";
+
+export function tint(c: string | undefined, night: boolean): string {
+  const rgb = night && (c === "sunny" || c === "clear-night" || c === "partlycloudy")
+    ? TINT_NIGHT
+    : (c && TINT_DAY[c]) || TINT_DAY.cloudy;
+  return `rgba(${rgb},${night ? 0.35 : 0.45})`;
+}
+
 const MOON: Record<string, string> = {
   new_moon: "Neumond",
   waxing_crescent: "Zunehmende Sichel",

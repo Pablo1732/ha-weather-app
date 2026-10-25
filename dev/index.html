@@ -12,6 +12,7 @@
       --secondary-text-color:#727272; --divider-color:rgba(0,0,0,.12); }
     body { margin: 0; background: var(--primary-background-color); font-family: Roboto, "Segoe UI", sans-serif; }
     #wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .page #wrap { max-width: none; padding: 0; }
     .bar { color: #aaa; font-size: 13px; padding-bottom: 8px; display: flex; gap: 12px; flex-wrap: wrap; }
     .bar label { cursor: pointer; }
   </style>
@@ -32,6 +33,7 @@
   <script type="module">
     const light = location.search.includes("light");
     if (light) document.documentElement.classList.add("light");
+    if (location.search.includes("page")) document.documentElement.classList.add("page");
     window.mockHass.themes = { darkMode: !light };
     import "./out/mock.js";
     import "./out/wetter-app.js";
@@ -41,6 +43,7 @@
       type: "custom:wetter-app",
       weather: "weather.weather_fusion_ai_kresslingweg",
       name: "Kresslingweg",
+      layout: location.search.includes("page") ? "page" : "card",
       sun: "sun.sun",
       moon: "sensor.moon_phase",
       sensors: {

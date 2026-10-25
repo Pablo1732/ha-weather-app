@@ -8,7 +8,7 @@ Wetter-App als Lovelace-Karte, angelehnt an Apple Wetter: aktuelle Werte der eig
 - Tabs **Vorhersage** / **Historie**
 - Stundenleiste und Tagesliste mit Temperaturbalken
 - Gemeinsamer Zeitraum: Tag · 7 Tage · 30 Tage · Monat · Jahr, mit ‹ › blättern
-- Hintergrund passend zu Wetter und Tag/Nacht
+- Dezenter Hintergrund passend zu Wetter und Tag/Nacht, sonst HA-Theme-Farben
 - Nur offizielle HA-Schnittstellen (`weather/subscribe_forecast`, `recorder/statistics_during_period`) → robust bei HA-Updates
 - Historie über Langzeitstatistik → auch Jahresansichten laden schnell
 
@@ -27,6 +27,7 @@ Wetter-App als Lovelace-Karte, angelehnt an Apple Wetter: aktuelle Werte der eig
 type: custom:wetter-app
 weather: weather.weather_fusion_ai_kresslingweg
 name: Kresslingweg
+layout: page
 sun: sun.sun
 moon: sensor.moon_phase
 sensors:
@@ -48,6 +49,7 @@ sensors:
 |---|---|---|
 | `weather` | ja | Vorhersage-Entität |
 | `name` | nein | Ortsname im Kopf |
+| `layout` | nein | `page` = ganze Fläche ohne Rundung (für Panel-Ansicht), Standard `card` |
 | `sun` | nein | `sun.sun` für Tag/Nacht-Hintergrund |
 | `moon` | nein | Mondphasen-Sensor |
 | `sensors.*` | nein | Stationssensoren; fehlende Werte werden ausgeblendet |
