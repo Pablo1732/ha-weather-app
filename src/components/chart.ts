@@ -201,7 +201,8 @@ export class WetterChart extends LitElement {
   }
 
   private hoverAt(clientX: number): void {
-    const svgEl = this.renderRoot.querySelector("svg");
+    // das Diagramm selbst, nicht das Wetter-Symbol im Tooltip (steht davor)
+    const svgEl = this.renderRoot.querySelector(".wrap > svg");
     if (!svgEl) return;
     const px = clientX - svgEl.getBoundingClientRect().left;
     const t = this.start + ((px - PAD.l) / (this._w - PAD.l - PAD.r)) * (this.end - this.start);
