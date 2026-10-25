@@ -215,7 +215,8 @@ export class WetterDayDetail extends LitElement {
       yUnit = "";
       yMin = 0;
       const past = s.wind_speed && now ? this.pastRows(s.wind_speed).map((r) => ({ t: r.start + HOUR / 2, v: r.mean })) : [];
-      const pts = [...past, ...future.filter((p) => !now || p.t > now).map((p) => ({ t: p.t, v: p.h.wind_speed }))];
+      const cur = now ? stateNum(this.hass, s.wind_speed) : undefined;
+      const pts = [...past, ...(cur != null ? [{ t: now!, v: cur }] : []), ...future.filter((p) => !now || p.t > now).map((p) => ({ t: p.t, v: p.h.wind_speed }))];
       series.push({ type: "area", points: pts, color: "var(--wa-wind, #81c784)", dashUntil: now, label: "Ø", unit: " km/h", digits: 0 });
       if (s.wind_gust && now) {
         series.push({ type: "line", points: this.pastRows(s.wind_gust).map((r) => ({ t: r.start + HOUR / 2, v: r.max })), color: "var(--wa-gust, #ffb74d)", label: "Böe", unit: " km/h", digits: 0 });
@@ -227,16 +228,17 @@ export class WetterDayDetail extends LitElement {
         .now=${now} .height=${220} .yUnit=${yUnit} .yMin=${yMin} .rightMax=${rightMax} .rightUnit=${rightUnit}
         .timeFormat=${(t: number) => new Date(t).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}>
       </wetter-app-chart>
-      ${this.metric === "wind" ? this.renderWindDirs(future) : nothing}
+      ${this.metric === "wind" ? this.renderWindDirs(start, future) : nothing}
       ${this.metric === "rain" ? html`<div class="legend"><i style="background:var(--wa-rain)"></i>Menge pro Stunde
         <i class="ln" style="background:var(--wa-prob, #90caf9)"></i>Wahrscheinlichkeit${now ? html`<i style="background:var(--wa-rain-past, #1e6fb8)"></i>gemessen` : nothing}</div>` : nothing}
     `;
   }
 
-  private renderWindDirs(pts: { t: number; h: ForecastItem }[]) {
-    const step = pts.filter((_, i) => i % 3 === 0).slice(0, 8);
+  private renderWindDirs(start: number, pts: { t: number; h: ForecastItem }[]) {
+    const step = pts.filter((p) => new Date(p.t).getHours() % 3 === 0);
+    // gleiche Ränder wie im Diagramm (links 6 px, rechts 38 px) → Pfeile stehen unter ihrer Uhrzeit
     return html`<div class="dirs">
-      ${step.map((p) => html`<div>
+      ${step.map((p) => html`<div style="left:calc(6px + (100% - 44px) * ${(p.t - start) / (24 * HOUR)})">
         <ha-icon icon="mdi:navigation" style="transform:rotate(${(p.h.wind_bearing ?? 0) + 180}deg)"></ha-icon>
         <span>${new Date(p.t).getHours()} Uhr</span></div>`)}
     </div>`;
@@ -291,8 +293,11 @@ export class WetterDayDetail extends LitElement {
       .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12px; color: var(--wa-text2); margin-top: 8px; }
       .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: -6px; }
       .legend i.ln { height: 3px; }
-      .dirs { display: flex; justify-content: space-around; margin-top: 8px; }
-      .dirs div { display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--wa-text2); }
+      .dirs { position: relative; height: 36px; margin-top: 6px; }
+      .dirs div {
+        position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column;
+        align-items: center; font-size: 11px; color: var(--wa-text2); white-space: nowrap;
+      }
       .dirs ha-icon { --mdc-icon-size: 18px; color: var(--wa-text); }
     `,
   ];
