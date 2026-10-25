@@ -255,19 +255,24 @@ export class WetterChart extends LitElement {
       const t = this._hover;
       const x = this.x(t);
       parts.push(svg`<line x1=${x} x2=${x} y1=${PAD.t - 6} y2=${bottom} class="hov"/>`);
-      const rows: string[] = [];
+      const rows: { color: string; label: string; value: string }[] = [];
       for (const s of this.series) {
         const p = nearest(s, t);
         if (!p || p.v == null || s.silent) continue;
         const sc = s.axis === "right" && R ? R : L;
         if (s.type === "line" || s.type === "area") parts.push(svg`<circle cx=${x} cy=${sc.y(p.v)} r="4" style="fill:${s.color}" class="hdot"/>`);
-        const val = (s.type === "band" || s.type === "range") && p.v2 != null
-          ? `${num(p.v, s.digits ?? 1)} – ${num(p.v2, s.digits ?? 1)}`
-          : num(p.v, s.digits ?? 1);
-        rows.push(`${s.label ? s.label + " " : ""}${val}${s.unit ?? ""}`);
+        const f = (v: number) => `${num(v, s.digits ?? 1)}${s.unit ?? ""}`;
+        // Min/Max als eigene, beschriftete Zeilen statt „21 – 99“
+        if ((s.type === "band" || s.type === "range") && p.v2 != null) {
+          rows.push({ color: s.color, label: "Max", value: f(p.v2) }, { color: s.color, label: "Min", value: f(p.v) });
+        } else {
+          rows.push({ color: s.color, label: s.label ?? "", value: f(p.v) });
+        }
       }
-      const left = Math.min(Math.max(x, 70), w - 70);
-      tip = html`<div class="tip" style="left:${left}px"><b>${this.timeFormat(t)}</b>${rows.map((r) => html`<span>${r}</span>`)}</div>`;
+      // Box neben der Linie, innerhalb des Diagramms → verdeckt nichts darüber
+      const side = x > w / 2 ? `right:${w - x + 8}px` : `left:${x + 8}px`;
+      tip = html`<div class="tip" style="${side}"><b>${this.timeFormat(t)}</b>
+        ${rows.map((r) => html`<div class="tr"><i style="background:${r.color}"></i><span>${r.label}</span><b>${r.value}</b></div>`)}</div>`;
     }
 
     return html`
@@ -295,11 +300,15 @@ export class WetterChart extends LitElement {
     .hov { stroke: var(--primary-text-color); stroke-width: 1; }
     .hdot { stroke: var(--card-background-color, #000); stroke-width: 2; }
     .tip {
-      position: absolute; top: -8px; transform: translate(-50%, -100%); pointer-events: none; z-index: 1;
+      position: absolute; top: 4px; pointer-events: none; z-index: 1; min-width: 96px;
       background: var(--card-background-color, #222); color: var(--primary-text-color);
-      border: 1px solid var(--divider-color); border-radius: 8px; padding: 4px 8px; font-size: 12px;
-      display: flex; gap: 8px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--divider-color); border-radius: 8px; padding: 6px 8px; font-size: 12px;
+      display: flex; flex-direction: column; gap: 3px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     }
+    .tr { display: flex; align-items: center; gap: 6px; }
+    .tr i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+    .tr span { color: var(--secondary-text-color); flex: 1; }
+    .tr b { font-weight: 600; }
   `;
 }
 

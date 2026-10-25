@@ -80,6 +80,7 @@ function stats(msg: any): Record<string, StatValue[]> {
       else if (id.endsWith("wind_speed")) { base = 6; spread = 4; }
       else if (id.endsWith("wind_gust")) { base = 12; spread = 10; }
       else if (id.endsWith("pressure")) { base = 935; spread = 6; }
+      else if (id.endsWith("wind_direction")) { base = 200 + 90 * Math.sin(t.getTime() / 2e7); spread = 200; }
       const n = Math.sin(t.getTime() / 7e7) * 0.5;
       const days = (next.getTime() - t.getTime()) / 86_400_000;
       rows.push({

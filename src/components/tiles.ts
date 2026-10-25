@@ -173,27 +173,58 @@ function moonTile({ hass, config }: TileData) {
   const phase = config.moon ? hass.states[config.moon]?.state : undefined;
   const m = moonInfo(new Date());
   const days = Math.round((m.nextFull.getTime() - Date.now()) / 86_400_000);
-  const waxing = m.age < 29.530588853 / 2;
   const k = m.illumination;
-  const rx = 20 * Math.abs(1 - 2 * k);
-  const lit = `M50 30 A20 20 0 0 1 50 70 A${rx} 20 0 0 ${k > 0.5 ? 1 : 0} 50 30Z`;
   return html`<section class="card tile wide2">${head("mdi:moon-waxing-gibbous", phase ? moonLabel(phase) : "Mond")}
     <div class="moon">
-      <svg viewBox="28 28 44 44"><circle cx="50" cy="50" r="20" class="moon-dark"/>
-        <path d=${lit} class="moon-lit" transform=${waxing ? "" : "translate(100 0) scale(-1 1)"}/></svg>
       <div>
         <div class="row"><span>Beleuchtung</span><b>${Math.round(k * 100)} %</b></div>
-        <div class="row"><span>Vollmond</span><b>${days <= 0 ? "heute" : days === 1 ? "morgen" : `in ${days} Tg.`}</b></div>
+        <div class="row"><span>Nächster Vollmond</span><b>${days <= 0 ? "heute" : days === 1 ? "morgen" : `in ${days} Tg.`}</b></div>
       </div>
+      ${moonSvg(k, m.age < 29.530588853 / 2)}
     </div></section>`;
 }
 
+// Mare (dunkle Flächen) in Einheitskoordinaten (−1…1), grob nach der echten Mondvorderseite
+const MARIA: [number, number, number, number][] = [
+  [-0.55, 0.05, 0.3, 0.45], [-0.3, -0.35, 0.28, 0.22], [0.15, -0.38, 0.16, 0.14], [0.3, -0.1, 0.2, 0.16],
+  [0.66, -0.3, 0.1, 0.09], [0.55, 0.15, 0.12, 0.17], [0.35, 0.3, 0.08, 0.08], [-0.2, 0.35, 0.18, 0.13],
+  [-0.48, 0.42, 0.09, 0.08], [-0.05, -0.68, 0.35, 0.07], [-0.15, -0.08, 0.14, 0.1],
+];
+
+/** Mond mit Oberflächenstruktur; unbeleuchteter Teil als weiche Schattenfläche darüber. */
+function moonSvg(k: number, waxing: boolean) {
+  const R = 20, C = 50;
+  const rx = R * Math.abs(1 - 2 * k);
+  // dunkle Seite = linke Hälfte (bei zunehmend) + Terminator-Bogen
+  const dark = `M${C} ${C - R} A${R} ${R} 0 0 0 ${C} ${C + R} A${rx} ${R} 0 0 ${k > 0.5 ? 1 : 0} ${C} ${C - R}Z`;
+  return svg`<svg class="moonimg" viewBox="28 28 44 44" aria-hidden="true">
+    <defs>
+      <radialGradient id="mg" cx="0.42" cy="0.38" r="0.65">
+        <stop offset="0" stop-color="#f4f3ee"/><stop offset="0.75" stop-color="#d4d3cc"/><stop offset="1" stop-color="#a9a8a2"/>
+      </radialGradient>
+      <filter id="mb" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.1"/></filter>
+      <filter id="ms" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="0.5"/></filter>
+      <clipPath id="mc"><circle cx=${C} cy=${C} r=${R}/></clipPath>
+    </defs>
+    <g clip-path="url(#mc)">
+      <circle cx=${C} cy=${C} r=${R} fill="url(#mg)"/>
+      <g filter="url(#mb)" fill="#80838a" fill-opacity="0.5">
+        ${MARIA.map(([x, y, a, b]) => svg`<ellipse cx=${C + x * R} cy=${C + y * R} rx=${a * R} ry=${b * R}/>`)}
+      </g>
+      <circle cx=${C - 0.12 * R} cy=${C + 0.72 * R} r="0.9" fill="#fff" fill-opacity="0.8"/>
+      <circle cx=${C - 0.33 * R} cy=${C - 0.05 * R} r="0.7" fill="#fff" fill-opacity="0.6"/>
+      ${k < 0.995 ? svg`<path d=${dark} fill="#0a0c12" fill-opacity="0.86" filter="url(#ms)"
+        transform=${waxing ? "" : `translate(${2 * C} 0) scale(-1 1)`}/>` : nothing}
+    </g>
+  </svg>`;
+}
+
 export const tileStyles = css`
-  .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  .wide .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .tile { display: flex; flex-direction: column; min-height: 150px; }
+  /* so viele Spalten wie passen (Handy 2, Tablet/PC 3–6) → keine riesigen, halbleeren Kacheln */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; }
+  .tile { display: flex; flex-direction: column; min-height: 130px; }
   .tile.wide2 { grid-column: span 2; }
-  .tile .val { font-size: 32px; font-weight: 600; line-height: 1.2; margin-top: 4px; }
+  .tile .val { font-size: 28px; font-weight: 600; line-height: 1.2; margin-top: 2px; }
   .tile .lbl { font-size: 15px; font-weight: 500; }
   .tile .txt { font-size: 13px; color: var(--wa-text2); margin-top: auto; padding-top: 8px; }
   .row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--wa-divider); font-size: 14px; }
@@ -234,8 +265,6 @@ export const tileStyles = css`
   .sundot.down { background: var(--wa-text2); }
 
   .moon { display: flex; align-items: center; gap: 12px; flex: 1; }
-  .moon svg { width: 64px; height: 64px; flex: none; }
+  .moon .moonimg { width: 92px; height: 92px; flex: none; }
   .moon > div { flex: 1; min-width: 0; }
-  .moon-dark { fill: rgba(127, 127, 127, 0.25); }
-  .moon-lit { fill: var(--wa-moon); }
 `;

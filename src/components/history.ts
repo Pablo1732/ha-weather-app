@@ -3,7 +3,7 @@ import { isPreset, type TimeRange } from "../data/range";
 import { RangeController } from "../data/range-sync";
 import { fetchStatistics } from "../data/statistics";
 import type { HomeAssistant, StatPeriod, StatResult, StatValue, WetterConfig } from "../types";
-import { num, rain, temp } from "../util/format";
+import { num, rain, stateNum, temp } from "../util/format";
 import type { ChartSeries, ChartTick } from "./chart";
 import { rangeStyles, renderRangeSelector } from "./range-selector";
 import { cardStyles, head } from "./styles";
@@ -260,7 +260,7 @@ export class WetterHistory extends LitElement {
       return list.map((x) => ({ t: Math.min(x.end, r.end.getTime()), v: (acc += x.change ?? 0) }));
     };
     const series: ChartSeries[] = [
-      { type: "bar", points: rows.map((x) => ({ t: x.start, t2: x.end, v: x.change ?? 0 })), color: "var(--wa-rain)", label: "", unit: " l/m²", digits: 1 },
+      { type: "bar", points: rows.map((x) => ({ t: x.start, t2: x.end, v: x.change ?? 0 })), color: "var(--wa-rain)", label: "Menge", unit: " l/m²", digits: 1 },
       { type: "line", axis: "right", points: [{ t: r.start.getTime(), v: 0 }, ...cumul(rows)], color: "var(--wa-prob, #90caf9)", label: "Summe", unit: " l/m²", digits: 1 },
     ];
     if (d.prev) {
@@ -288,7 +288,7 @@ export class WetterHistory extends LitElement {
       ...(gust.length ? [{ type: "line" as const, points: gust.map((x) => ({ t: center(x), v: x.max })), color: "var(--wa-gust, #ffb74d)", label: "Böe", unit: " km/h", digits: 0 }] : []),
     ];
     return html`<section class="card">${head("mdi:weather-windy", "Wind")}
-      ${s.wind_direction ? renderWindrose(dirRows, speedForRose) : nothing}
+      ${s.wind_direction ? renderWindrose(dirRows, speedForRose, r.live ? { direction: stateNum(this.hass, s.wind_direction), speed: stateNum(this.hass, s.wind_speed) } : {}) : nothing}
       ${this.chart(r, series, { yMin: 0, period: p.main, height: 160 })}
       <div class="legend"><i class="ln" style="background:#81c784"></i>Durchschnitt<i class="ln" style="background:#ffb74d"></i>stärkste Böe</div>
     </section>`;
@@ -345,8 +345,7 @@ export class WetterHistory extends LitElement {
       :host { display: flex; flex-direction: column; gap: 12px; }
       .cols, .grid { display: grid; gap: 12px; }
       :host([wide]) .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
-      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      :host([wide]) .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .grid { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
       .kv .big { font-size: 26px; font-weight: 600; margin-top: 4px; }
       .kv .sub { font-size: 12px; color: var(--wa-text2); margin-bottom: 6px; }
       .ext { display: flex; align-items: baseline; gap: 6px; font-size: 14px; flex-wrap: wrap; }

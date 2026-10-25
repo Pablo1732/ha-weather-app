@@ -203,7 +203,7 @@ export class WetterApp extends LitElement {
             <div class="wd">${weekday(new Date(d.datetime))}</div>
             <div class="ic">
               ${weatherIcon(d.condition)}
-              ${(d.precipitation_probability ?? 0) >= 20 ? html`<span class="p">${Math.round(d.precipitation_probability!)} %</span>` : nothing}
+              <span class="p">${(d.precipitation_probability ?? 0) >= 20 ? `${Math.round(d.precipitation_probability!)} %` : ""}</span>
             </div>
             <div class="lo">${temp(l)}</div>
             <div class="bar">
@@ -234,7 +234,8 @@ export class WetterApp extends LitElement {
       /* Panel-Ansicht setzt --ha-card-border-radius: 0 → innere Karten bekommen den HA-Standardradius */
       .app.page {
         border-radius: 0; min-height: calc(100vh - var(--header-height, 56px)); padding: 20px 10px;
-        --wa-radius: var(--ha-border-radius-lg, 12px);
+        /* direkt die HA-Variable setzen → gilt auch in Historie/Detail (eigene Shadow-Roots) */
+        --ha-card-border-radius: var(--ha-border-radius-lg, 12px);
       }
 
       header { text-align: center; padding: 8px 0 12px; }
@@ -270,12 +271,14 @@ export class WetterApp extends LitElement {
         padding: 6px 0; border-bottom: 1px solid var(--wa-divider);
       }
       .day:last-child { border-bottom: 0; }
-      .day, .hr { cursor: pointer; border-radius: 8px; }
+      .day, .hr { cursor: pointer; }
+      .hr { border-radius: 8px; }
       .day:hover, .hr:hover { background: rgba(127, 127, 127, 0.08); }
       .wd { font-size: 15px; font-weight: 500; }
-      .ic { display: flex; flex-direction: column; align-items: center; }
+      /* feste Höhe → alle Tageszeilen gleich hoch, egal ob Regen-% darunter steht */
+      .ic { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 42px; }
       .ic .wicon { width: 28px; height: 28px; }
-      .ic .p { font-size: 11px; color: var(--wa-rain); font-weight: 500; }
+      .ic .p { font-size: 11px; line-height: 13px; height: 13px; color: var(--wa-rain); font-weight: 500; }
       .lo { color: var(--wa-text2); text-align: right; font-size: 15px; }
       .hi { text-align: right; font-size: 15px; font-weight: 500; }
       .bar { position: relative; height: 5px; background: var(--wa-track); border-radius: 3px; }

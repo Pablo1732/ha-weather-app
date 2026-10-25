@@ -196,7 +196,7 @@ export class WetterDayDetail extends LitElement {
       const cur = now ? stateNum(this.hass, s.temperature) : undefined;
       const blend = temperatureBlender(this.hourly, cur);
       const pts = [...past, ...(cur != null ? [{ t: now!, v: cur }] : []), ...future.filter((p) => !now || p.t > now).map((p) => ({ t: p.t, v: blend(p.t, p.h.temperature) }))];
-      series.push({ type: "area", points: pts, color: "var(--wa-temp, #4fc3f7)", dashUntil: now, label: "", unit: "°", digits: 1 });
+      series.push({ type: "area", points: pts, color: "var(--wa-temp, #4fc3f7)", dashUntil: now, label: "Temperatur", unit: "°", digits: 1 });
       const valid = pts.filter((p) => p.v != null) as { t: number; v: number }[];
       if (valid.length) {
         const hi = valid.reduce((a, b) => (b.v > a.v ? b : a));
@@ -209,8 +209,8 @@ export class WetterDayDetail extends LitElement {
       if (s.rain_total && now) {
         series.push({ type: "bar", points: this.pastRows(s.rain_total).map((r) => ({ t: r.start, v: r.change })), color: "var(--wa-rain-past, #1e6fb8)", barWidth: HOUR, label: "gemessen", unit: " l/m²", digits: 1 });
       }
-      series.push({ type: "bar", points: future.map((p) => ({ t: p.t, v: p.h.precipitation ?? 0 })), color: "var(--wa-rain)", barWidth: HOUR, label: "", unit: " l/m²", digits: 1 });
-      series.push({ type: "line", axis: "right", points: future.map((p) => ({ t: p.t + HOUR / 2, v: p.h.precipitation_probability })), color: "var(--wa-prob, #90caf9)", unit: " %", digits: 0 });
+      series.push({ type: "bar", points: future.map((p) => ({ t: p.t, v: p.h.precipitation ?? 0 })), color: "var(--wa-rain)", barWidth: HOUR, label: "Menge", unit: " l/m²", digits: 1 });
+      series.push({ type: "line", axis: "right", points: future.map((p) => ({ t: p.t + HOUR / 2, v: p.h.precipitation_probability })), color: "var(--wa-prob, #90caf9)", label: "Wahrscheinl.", unit: " %", digits: 0 });
       rightMax = 100;
       rightUnit = " %";
     } else {
@@ -219,7 +219,7 @@ export class WetterDayDetail extends LitElement {
       const past = s.wind_speed && now ? this.pastRows(s.wind_speed).map((r) => ({ t: r.start + HOUR / 2, v: r.mean })) : [];
       const cur = now ? stateNum(this.hass, s.wind_speed) : undefined;
       const pts = [...past, ...(cur != null ? [{ t: now!, v: cur }] : []), ...future.filter((p) => !now || p.t > now).map((p) => ({ t: p.t, v: p.h.wind_speed }))];
-      series.push({ type: "area", points: pts, color: "var(--wa-wind, #81c784)", dashUntil: now, label: "Ø", unit: " km/h", digits: 0 });
+      series.push({ type: "area", points: pts, color: "var(--wa-wind, #81c784)", dashUntil: now, label: "Wind", unit: " km/h", digits: 0 });
       if (s.wind_gust && now) {
         series.push({ type: "line", points: this.pastRows(s.wind_gust).map((r) => ({ t: r.start + HOUR / 2, v: r.max })), color: "var(--wa-gust, #ffb74d)", label: "Böe", unit: " km/h", digits: 0 });
       }
@@ -253,7 +253,9 @@ export class WetterDayDetail extends LitElement {
       .backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
       .sheet {
         position: relative; width: 100%; max-width: 720px; overflow-y: auto; box-sizing: border-box;
-        background: var(--primary-background-color, #111); padding: 8px 12px 24px;
+        background: var(--primary-background-color, #111);
+        /* iPhone: nicht unter Statusleiste/Home-Indikator rutschen */
+        padding: calc(8px + env(safe-area-inset-top, 0px)) 12px calc(24px + env(safe-area-inset-bottom, 0px));
         display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch;
       }
       @media (min-width: 760px) {
