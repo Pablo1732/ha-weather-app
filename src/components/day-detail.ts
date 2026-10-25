@@ -4,6 +4,7 @@ import type { ForecastItem, HomeAssistant, StatResult, WetterConfig } from "../t
 import { conditionLabel } from "../util/conditions";
 import { compass, num, rain, stateNum, temp } from "../util/format";
 import { weatherIcon } from "../util/icons";
+import { temperatureBlender } from "../util/blend";
 import type { ChartMarker, ChartSeries, ChartTick } from "./chart";
 import { cardStyles } from "./styles";
 
@@ -193,7 +194,8 @@ export class WetterDayDetail extends LitElement {
     if (this.metric === "temp") {
       const past = s.temperature && now ? this.pastRows(s.temperature).map((r) => ({ t: r.start + HOUR / 2, v: r.mean })) : [];
       const cur = now ? stateNum(this.hass, s.temperature) : undefined;
-      const pts = [...past, ...(cur != null ? [{ t: now!, v: cur }] : []), ...future.filter((p) => !now || p.t > now).map((p) => ({ t: p.t, v: p.h.temperature }))];
+      const blend = temperatureBlender(this.hourly, cur);
+      const pts = [...past, ...(cur != null ? [{ t: now!, v: cur }] : []), ...future.filter((p) => !now || p.t > now).map((p) => ({ t: p.t, v: blend(p.t, p.h.temperature) }))];
       series.push({ type: "area", points: pts, color: "var(--wa-temp, #4fc3f7)", dashUntil: now, label: "", unit: "°", digits: 1 });
       const valid = pts.filter((p) => p.v != null) as { t: number; v: number }[];
       if (valid.length) {

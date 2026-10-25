@@ -1,6 +1,7 @@
 import { WetterApp } from "./cards/wetter-app";
 import { WetterChart } from "./components/chart";
 import { WetterDayDetail } from "./components/day-detail";
+import { WetterHistory } from "./components/history";
 
 declare const __VERSION__: string;
 
@@ -12,6 +13,7 @@ const cards: [string, CustomElementConstructor, string, string][] = [
 const parts: [string, CustomElementConstructor][] = [
   ["wetter-app-chart", WetterChart],
   ["wetter-app-day-detail", WetterDayDetail],
+  ["wetter-app-history", WetterHistory],
 ];
 
 for (const [tag, cls] of [...parts, ...cards]) {

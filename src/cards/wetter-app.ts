@@ -1,16 +1,14 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { ForecastController } from "../data/forecast";
-import { isPreset, type TimeRange } from "../data/range";
-import { RangeController } from "../data/range-sync";
 import { fetchStatistics } from "../data/statistics";
-import { rangeStyles, renderRangeSelector } from "../components/range-selector";
 import { cardStyles, head } from "../components/styles";
 import { renderTiles, tileStyles } from "../components/tiles";
 import type { Metric } from "../components/day-detail";
 import type { ForecastItem, HomeAssistant, StatResult, WetterConfig } from "../types";
 import { conditionLabel, tint } from "../util/conditions";
-import { hour, num, rain, stateNum, temp, weekday } from "../util/format";
+import { hour, stateNum, temp, weekday } from "../util/format";
 import { weatherIcon } from "../util/icons";
+import { temperatureBlender } from "../util/blend";
 
 type Tab = "forecast" | "history";
 
@@ -19,8 +17,6 @@ export class WetterApp extends LitElement {
     hass: { attribute: false },
     _config: { state: true },
     _tab: { state: true },
-    _stats: { state: true },
-    _statsError: { state: true },
     _wide: { state: true },
     _detail: { state: true },
     _metric: { state: true },
@@ -30,9 +26,6 @@ export class WetterApp extends LitElement {
   hass?: HomeAssistant;
   private _config!: WetterConfig;
   private _tab: Tab = "forecast";
-  private _stats?: StatResult;
-  private _statsError?: string;
-  private _statsKey?: string;
   private _wide = false;
   /** geöffnetes Tagesdetail (Index in der Tagesvorhersage) */
   private _detail?: number;
@@ -43,11 +36,6 @@ export class WetterApp extends LitElement {
 
   private hourly = new ForecastController(this, "hourly", () => this._config?.weather);
   private daily = new ForecastController(this, "daily", () => this._config?.weather);
-  private range = new RangeController(
-    this,
-    () => this._config?.sync_group ?? "default",
-    () => (isPreset(this._config?.default_range) ? this._config.default_range : "7d"),
-  );
 
   setConfig(config: WetterConfig): void {
     if (!config?.weather) throw new Error("`weather:` fehlt (z. B. weather.weather_fusion_ai_kresslingweg)");
@@ -95,8 +83,7 @@ export class WetterApp extends LitElement {
   }
 
   protected updated(): void {
-    if (this._tab === "history") this.loadStats(this.range.range);
-    else this.loadRecent();
+    if (this._tab === "forecast") this.loadRecent();
   }
 
   /** Letzte 24 h stündlich: Regen gemessen + Luftdruck-Tendenz für die Kacheln. */
@@ -119,32 +106,6 @@ export class WetterApp extends LitElement {
   private openDetail(index: number, metric: Metric = this._metric): void {
     this._metric = metric;
     this._detail = index;
-  }
-
-  private async loadStats(r: TimeRange): Promise<void> {
-    const s = this._config.sensors ?? {};
-    const key = `${r.start.getTime()}|${r.end.getTime()}|${r.period}`;
-    if (!this.hass || key === this._statsKey) return;
-    this._statsKey = key;
-    this._statsError = undefined;
-    try {
-      const [means, rainStats] = await Promise.all([
-        fetchStatistics(this.hass, {
-          ids: [s.temperature, s.wind_speed, s.wind_gust, s.humidity, s.pressure].filter(Boolean) as string[],
-          start: r.start, end: r.end, period: r.period, types: ["mean", "min", "max"],
-        }),
-        fetchStatistics(this.hass, {
-          ids: s.rain_total ? [s.rain_total] : [],
-          start: r.start, end: r.end, period: r.period, types: ["change"],
-        }),
-      ]);
-      if (key === this._statsKey) this._stats = { ...means, ...rainStats };
-    } catch (err: any) {
-      if (key === this._statsKey) {
-        this._statsError = err?.message ?? String(err);
-        this._statsKey = undefined;
-      }
-    }
   }
 
   protected render() {
@@ -176,7 +137,7 @@ export class WetterApp extends LitElement {
             </button>`)}
         </nav>
 
-        <main>${this._tab === "forecast" ? this.renderForecast(nowTemp, night) : this.renderHistory()}</main>
+        <main>${this._tab === "forecast" ? this.renderForecast(nowTemp, night) : html`<wetter-app-history .hass=${this.hass} .config=${this._config} .wide=${this._wide}></wetter-app-history>`}</main>
       </div>
     `;
   }
@@ -205,6 +166,7 @@ export class WetterApp extends LitElement {
     if (!fc) return html`<div class="loading">Lade Stundenvorhersage …</div>`;
     const from = Date.now() - 3_600_000;
     const items = fc.filter((f) => new Date(f.datetime).getTime() > from).slice(0, 25);
+    const blend = temperatureBlender(fc, nowTemp);
     return html`
       ${head("mdi:clock-outline", "Stündlich")}
       <div class="hours">
@@ -213,7 +175,7 @@ export class WetterApp extends LitElement {
             <div class="t">${i === 0 ? "Jetzt" : hour(new Date(f.datetime))}</div>
             ${weatherIcon(f.condition, i === 0 ? night : f.is_daytime === false)}
             <div class="p">${(f.precipitation_probability ?? 0) >= 20 ? `${Math.round(f.precipitation_probability!)} %` : ""}</div>
-            <div class="v">${temp(i === 0 ? nowTemp ?? f.temperature : f.temperature)}</div>
+            <div class="v">${temp(i === 0 ? nowTemp ?? f.temperature : blend(new Date(f.datetime).getTime(), f.temperature))}</div>
           </div>`)}
       </div>
     `;
@@ -256,55 +218,8 @@ export class WetterApp extends LitElement {
     `;
   }
 
-  private renderHistory() {
-    const s = this._config.sensors ?? {};
-    const st = this._stats;
-    const agg = (id: string | undefined, f: "min" | "max" | "mean") => {
-      const rows = id ? st?.[id] : undefined;
-      const vals = rows?.map((r) => r[f]).filter((v): v is number => v != null) ?? [];
-      if (!vals.length) return undefined;
-      if (f === "min") return Math.min(...vals);
-      if (f === "max") return Math.max(...vals);
-      return vals.reduce((a, b) => a + b, 0) / vals.length;
-    };
-    const rainSum = s.rain_total
-      ? st?.[s.rain_total]?.reduce((a, r) => a + (r.change ?? 0), 0)
-      : undefined;
-
-    return html`
-      <section class="card">${renderRangeSelector(this.range)}</section>
-      ${this._statsError ? html`<div class="warn">Statistik nicht verfügbar: ${this._statsError}</div>` : nothing}
-      ${!st ? html`<div class="loading">Lade Historie …</div>` : html`
-        <div class="grid">
-          <section class="card kv">
-            ${head("mdi:thermometer", "Temperatur")}
-            <div class="big">${temp(agg(s.temperature, "mean"), 1)}</div>
-            <div class="sub">Ø · min ${temp(agg(s.temperature, "min"), 1)} · max ${temp(agg(s.temperature, "max"), 1)}</div>
-          </section>
-          <section class="card kv">
-            ${head("mdi:weather-pouring", "Regen")}
-            <div class="big">${rain(rainSum)}</div>
-            <div class="sub">Summe im Zeitraum</div>
-          </section>
-          <section class="card kv">
-            ${head("mdi:weather-windy", "Wind")}
-            <div class="big">${num(agg(s.wind_speed, "mean"))} km/h</div>
-            <div class="sub">Ø · stärkste Böe ${num(agg(s.wind_gust, "max"))} km/h</div>
-          </section>
-          <section class="card kv">
-            ${head("mdi:water-percent", "Luftfeuchte")}
-            <div class="big">${num(agg(s.humidity, "mean"), 0)} %</div>
-            <div class="sub">Ø · min ${num(agg(s.humidity, "min"), 0)} % · max ${num(agg(s.humidity, "max"), 0)} %</div>
-          </section>
-        </div>
-        <div class="hint">Diagramme folgen in Schritt 3.</div>
-      `}
-    `;
-  }
-
   static styles = [
     cardStyles,
-    rangeStyles,
     tileStyles,
     css`
       :host { display: block; }
@@ -339,10 +254,8 @@ export class WetterApp extends LitElement {
       .tabs button.on { color: var(--wa-accent); border-bottom-color: var(--wa-accent); }
 
       main { display: flex; flex-direction: column; gap: 12px; }
-      .cols, .grid { display: grid; gap: 12px; }
+      .cols { display: grid; gap: 12px; }
       .wide .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
-      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .wide .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
       .hours { display: flex; overflow-x: auto; gap: 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
       .hours::-webkit-scrollbar { display: none; }
@@ -376,8 +289,6 @@ export class WetterApp extends LitElement {
         border-radius: 50%;
       }
 
-      .kv .big { font-size: 26px; font-weight: 400; margin-top: 4px; }
-      .kv .sub { font-size: 13px; color: var(--wa-text2); }
     `,
   ];
 }

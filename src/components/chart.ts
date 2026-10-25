@@ -7,15 +7,20 @@ import { num } from "../util/format";
 export interface ChartPoint {
   t: number;
   v: number | null | undefined;
-  /** Obergrenze bei `band` (v = unten, v2 = oben) */
+  /** Obergrenze bei `band`/`range` (v = unten, v2 = oben) */
   v2?: number | null;
+  /** Ende des Zeitabschnitts (Balkenbreite bei ungleich langen Abschnitten, z. B. Monate) */
+  t2?: number;
 }
 
 export interface ChartSeries {
-  type: "line" | "area" | "bar" | "band";
+  /** range = senkrechter Balken von v bis v2 (Min–Max je Tag/Monat) */
+  type: "line" | "area" | "bar" | "band" | "range";
   points: ChartPoint[];
   color: string;
   axis?: "left" | "right";
+  /** ganze Linie gestrichelt (z. B. Vorjahr) */
+  dashed?: boolean;
   /** Linie vor diesem Zeitpunkt gestrichelt (Vergangenheit vs. Vorhersage) */
   dashUntil?: number;
   /** Balkenbreite in ms (Standard: Abstand der Punkte) */
@@ -138,7 +143,8 @@ export class WetterChart extends LitElement {
     for (const s of this.series) {
       for (const p of s.points) {
         if (p.v == null) continue;
-        if (best == null || Math.abs(p.t - t) < Math.abs(best - t)) best = p.t;
+        const c = center(s, p);
+        if (best == null || Math.abs(c - t) < Math.abs(best - t)) best = c;
       }
     }
     this._hover = best;
@@ -178,14 +184,18 @@ export class WetterChart extends LitElement {
       const sc = s.axis === "right" && R ? R : L;
       const pts = s.points.filter((p) => p.v != null).sort((a, b) => a.t - b.t);
       if (!pts.length) return;
-      if (s.type === "bar") {
-        const bw = s.barWidth ?? (pts.length > 1 ? pts[1].t - pts[0].t : (this.end - this.start) / 24);
-        const pxw = Math.max(1.5, (this.x(this.start + bw) - this.x(this.start)) * 0.7);
+      if (s.type === "bar" || s.type === "range") {
+        const defW = s.barWidth ?? (pts.length > 1 ? pts[1].t - pts[0].t : (this.end - this.start) / 24);
         const y0 = sc.y(Math.max(0, sc.lo));
         for (const p of pts) {
+          const bw = p.t2 != null ? p.t2 - p.t : defW;
+          const pxw = Math.max(1.5, Math.min(14, (this.x(this.start + bw) - this.x(this.start)) * 0.65));
           const xc = this.x(p.t + bw / 2);
-          const y = sc.y(p.v!);
-          parts.push(svg`<rect x=${xc - pxw / 2} y=${Math.min(y, y0)} width=${pxw} height=${Math.max(0.5, Math.abs(y0 - y))} rx="2" style="fill:${s.color}"/>`);
+          const ya = sc.y(p.v!);
+          const yb = s.type === "range" ? sc.y(p.v2 ?? p.v!) : y0;
+          const h = Math.max(s.type === "range" ? pxw : 0.5, Math.abs(yb - ya));
+          const top = Math.min(ya, yb) - (h - Math.abs(yb - ya)) / 2;
+          parts.push(svg`<rect x=${xc - pxw / 2} y=${top} width=${pxw} height=${h} rx=${s.type === "range" ? pxw / 2 : 2} style="fill:${s.color}"/>`);
         }
         return;
       }
@@ -214,7 +224,7 @@ export class WetterChart extends LitElement {
         parts.push(svg`<path d=${smooth(a)} class="ln" style="stroke:${s.color}" stroke-dasharray="5 5"/>`);
         if (b.length > 1) parts.push(svg`<path d=${smooth(b)} class="ln" style="stroke:${s.color}"/>`);
       } else {
-        parts.push(svg`<path d=${smooth(xy)} class="ln" style="stroke:${s.color}"/>`);
+        parts.push(svg`<path d=${smooth(xy)} class="ln" style="stroke:${s.color}" stroke-dasharray=${s.dashed ? "4 4" : "none"}/>`);
       }
     });
 
@@ -243,7 +253,7 @@ export class WetterChart extends LitElement {
         if (!p || p.v == null || s.silent) continue;
         const sc = s.axis === "right" && R ? R : L;
         if (s.type === "line" || s.type === "area") parts.push(svg`<circle cx=${x} cy=${sc.y(p.v)} r="4" style="fill:${s.color}" class="hdot"/>`);
-        const val = s.type === "band" && p.v2 != null
+        const val = (s.type === "band" || s.type === "range") && p.v2 != null
           ? `${num(p.v, s.digits ?? 1)} – ${num(p.v2, s.digits ?? 1)}`
           : num(p.v, s.digits ?? 1);
         rows.push(`${s.label ? s.label + " " : ""}${val}${s.unit ?? ""}`);
@@ -287,11 +297,19 @@ export class WetterChart extends LitElement {
 /** Punkt einer Serie nahe t — Toleranz halber Punktabstand (Balken/Linien liegen leicht versetzt). */
 function nearest(s: ChartSeries, t: number): ChartPoint | undefined {
   let best: ChartPoint | undefined;
-  for (const p of s.points) if (p.v != null && (!best || Math.abs(p.t - t) < Math.abs(best.t - t))) best = p;
+  for (const p of s.points) if (p.v != null && (!best || Math.abs(center(s, p) - t) < Math.abs(center(s, best) - t))) best = p;
   if (!best) return undefined;
   const pts = s.points;
-  const gap = s.barWidth ?? (pts.length > 1 ? Math.abs(pts[1].t - pts[0].t) : Infinity);
-  return Math.abs(best.t - t) <= gap / 2 + 1 ? best : undefined;
+  const gap = best.t2 != null ? best.t2 - best.t : s.barWidth ?? (pts.length > 1 ? Math.abs(pts[1].t - pts[0].t) : Infinity);
+  return Math.abs(center(s, best) - t) <= gap / 2 + 1 ? best : undefined;
+}
+
+/** Zeitpunkt, an dem ein Punkt gezeichnet wird — Balken stehen in der Mitte ihres Abschnitts. */
+function center(s: ChartSeries, p: ChartPoint): number {
+  if (s.type !== "bar" && s.type !== "range") return p.t;
+  const pts = s.points;
+  const bw = p.t2 != null ? p.t2 - p.t : s.barWidth ?? (pts.length > 1 ? pts[1].t - pts[0].t : 0);
+  return p.t + bw / 2;
 }
 
 function niceStep(raw: number): number {
