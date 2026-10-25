@@ -16,11 +16,11 @@ const sun = (cx = 32, cy = 32, r = 11) => svg`
   </g>`;
 
 const moon = (dx = 0, dy = 0, s = 1) => svg`
-  <path transform="translate(${dx} ${dy}) scale(${s})" fill="#F2F4FA"
+  <path class="mo" transform="translate(${dx} ${dy}) scale(${s})"
     d="M40 10a20 20 0 1 0 14 34A17 17 0 0 1 40 10z"/>`;
 
-const cloud = (dx = 0, dy = 0, s = 1, fill = "#F4F6F9") => svg`
-  <path transform="translate(${dx} ${dy}) scale(${s})" d=${CLOUD} fill=${fill}/>`;
+const cloud = (dx = 0, dy = 0, s = 1, cls = "c1") => svg`
+  <path transform="translate(${dx} ${dy}) scale(${s})" d=${CLOUD} class=${cls}/>`;
 
 const drops = (n: number) => svg`
   ${[...Array(n)].map((_, i) => {
@@ -28,11 +28,11 @@ const drops = (n: number) => svg`
     return svg`<line x1=${x} y1="50" x2=${x - 3} y2="58" stroke="#4FB3FF" stroke-width="3" stroke-linecap="round"/>`;
   })}`;
 
-const flakes = svg`${[22, 32, 42].map((x, i) => svg`<circle cx=${x} cy=${i % 2 ? 57 : 53} r="2.6" fill="#FFFFFF"/>`)}`;
+const flakes = svg`${[22, 32, 42].map((x, i) => svg`<circle cx=${x} cy=${i % 2 ? 57 : 53} r="2.6" class="fl"/>`)}`;
 
 const bolt = svg`<path d="M34 44l-7 10h6l-3 9l10-13h-6l3-6z" fill="#FFD84D"/>`;
 
-const fog = svg`${[40, 47, 54].map((y, i) => svg`<line x1=${12 + i * 3} y1=${y} x2=${52 - i * 2} y2=${y} stroke="#E6E9EE" stroke-width="3.5" stroke-linecap="round"/>`)}`;
+const fog = svg`${[40, 47, 54].map((y, i) => svg`<line x1=${12 + i * 3} y1=${y} x2=${52 - i * 2} y2=${y} class="ln" stroke-width="3.5" stroke-linecap="round"/>`)}`;
 
 export function weatherIcon(condition: string | undefined, night = false): SVGTemplateResult {
   let body: SVGTemplateResult;
@@ -48,38 +48,38 @@ export function weatherIcon(condition: string | undefined, night = false): SVGTe
       break;
     case "cloudy":
     case "windy-variant":
-      body = svg`${cloud(10, -4, 0.75, "#BFC6CF")}${cloud(-4, 6)}`;
+      body = svg`${cloud(10, -4, 0.75, "c2")}${cloud(-4, 6)}`;
       break;
     case "fog":
-      body = svg`${cloud(0, -8, 0.95, "#D5DAE0")}${fog}`;
+      body = svg`${cloud(0, -8, 0.95, "c2")}${fog}`;
       break;
     case "rainy":
       body = svg`${cloud(0, -6)}${drops(3)}`;
       break;
     case "pouring":
-      body = svg`${cloud(0, -6, 1, "#C9D0D8")}${drops(5)}`;
+      body = svg`${cloud(0, -6, 1, "c2")}${drops(5)}`;
       break;
     case "hail":
-      body = svg`${cloud(0, -6, 1, "#C9D0D8")}${flakes}`;
+      body = svg`${cloud(0, -6, 1, "c2")}${flakes}`;
       break;
     case "snowy":
       body = svg`${cloud(0, -6)}${flakes}`;
       break;
     case "snowy-rainy":
-      body = svg`${cloud(0, -6)}${drops(2)}<circle cx="32" cy="55" r="2.6" fill="#fff"/>`;
+      body = svg`${cloud(0, -6)}${drops(2)}<circle cx="32" cy="55" r="2.6" class="fl"/>`;
       break;
     case "lightning":
-      body = svg`${cloud(0, -8, 1, "#9BA4AF")}${bolt}`;
+      body = svg`${cloud(0, -8, 1, "c2")}${bolt}`;
       break;
     case "lightning-rainy":
     case "exceptional":
-      body = svg`${cloud(0, -8, 1, "#9BA4AF")}${bolt}${drops(2)}`;
+      body = svg`${cloud(0, -8, 1, "c2")}${bolt}${drops(2)}`;
       break;
     case "windy":
-      body = svg`${[24, 32, 40].map((y, i) => svg`<path d="M10 ${y}h${30 - i * 6}a6 6 0 1 0-6-6" fill="none" stroke="#E6E9EE" stroke-width="3.5" stroke-linecap="round"/>`)}`;
+      body = svg`${[24, 32, 40].map((y, i) => svg`<path d="M10 ${y}h${30 - i * 6}a6 6 0 1 0-6-6" fill="none" class="ln" stroke-width="3.5" stroke-linecap="round"/>`)}`;
       break;
     default:
-      body = cloud(0, 0, 1, "#BFC6CF");
+      body = cloud(0, 0, 1, "c2");
   }
   return svg`<svg class="wicon" viewBox="0 0 64 64" aria-hidden="true">${body}</svg>`;
 }

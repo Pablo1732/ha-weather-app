@@ -4,8 +4,9 @@ import { isPreset, type TimeRange } from "../data/range";
 import { RangeController } from "../data/range-sync";
 import { fetchStatistics } from "../data/statistics";
 import { rangeStyles, renderRangeSelector } from "../components/range-selector";
+import { cardStyles, head } from "../components/styles";
 import type { ForecastItem, HomeAssistant, StatResult, WetterConfig } from "../types";
-import { background, conditionLabel } from "../util/conditions";
+import { conditionLabel } from "../util/conditions";
 import { hour, num, rain, stateNum, temp, weekday } from "../util/format";
 import { weatherIcon } from "../util/icons";
 
@@ -116,7 +117,7 @@ export class WetterApp extends LitElement {
   protected render() {
     if (!this._config || !this.hass) return nothing;
     const w = this.hass.states[this._config.weather];
-    if (!w) return html`<div class="app"><div class="warn">Entität ${this._config.weather} nicht gefunden.</div></div>`;
+    if (!w) return html`<div class="warn">Entität ${this._config.weather} nicht gefunden.</div>`;
 
     const night = this._config.sun ? this.hass.states[this._config.sun]?.state === "below_horizon" : false;
     const s = this._config.sensors ?? {};
@@ -124,18 +125,26 @@ export class WetterApp extends LitElement {
     const today = this.daily.forecast?.[0];
 
     return html`
-      <div class="app ${this._wide ? "wide" : ""}" style="background:${background(w.state, night)}">
-        <header>
-          ${this._config.name ? html`<div class="place">${this._config.name}</div>` : nothing}
-          <div class="now">${temp(nowTemp)}</div>
-          <div class="cond">${conditionLabel(w.state)}</div>
-          ${today ? html`<div class="hl">H: ${temp(today.temperature)}  T: ${temp(today.templow)}</div>` : nothing}
-        </header>
+      <div class="app ${this._wide ? "wide" : ""} ${this.hass.themes?.darkMode ? "dark" : ""}">
+        <section class="card hero">
+          <div class="hero-main">
+            <div class="hero-icon">${weatherIcon(w.state, night)}</div>
+            <div class="hero-temp">${temp(nowTemp)}</div>
+          </div>
+          <div class="hero-info">
+            ${this._config.name ? html`<div class="place">${this._config.name}</div>` : nothing}
+            <div class="cond">${conditionLabel(w.state)}</div>
+            ${today ? html`<div class="hl">H: ${temp(today.temperature)} · T: ${temp(today.templow)}</div>` : nothing}
+          </div>
+        </section>
 
         <nav class="tabs" role="tablist">
           ${(["forecast", "history"] as Tab[]).map((t) => html`
             <button role="tab" aria-selected=${this._tab === t} class=${this._tab === t ? "on" : ""}
-              @click=${() => (this._tab = t)}>${t === "forecast" ? "Vorhersage" : "Historie"}</button>`)}
+              @click=${() => (this._tab = t)}>
+              <ha-icon icon=${t === "forecast" ? "mdi:calendar-arrow-right" : "mdi:chart-line"}></ha-icon>
+              ${t === "forecast" ? "Vorhersage" : "Historie"}
+            </button>`)}
         </nav>
 
         <main>${this._tab === "forecast" ? this.renderForecast(nowTemp, night) : this.renderHistory()}</main>
@@ -148,8 +157,8 @@ export class WetterApp extends LitElement {
     return html`
       ${err ? html`<div class="warn">Vorhersage nicht verfügbar: ${err}</div>` : nothing}
       <div class="cols">
-        <section class="tile">${this.renderHourly(nowTemp, night)}</section>
-        <section class="tile">${this.renderDaily(nowTemp)}</section>
+        <section class="card">${this.renderHourly(nowTemp, night)}</section>
+        <section class="card">${this.renderDaily(nowTemp)}</section>
       </div>
     `;
   }
@@ -160,7 +169,7 @@ export class WetterApp extends LitElement {
     const from = Date.now() - 3_600_000;
     const items = fc.filter((f) => new Date(f.datetime).getTime() > from).slice(0, 25);
     return html`
-      <div class="tile-h">Stündlich</div>
+      ${head("mdi:clock-outline", "Stündlich")}
       <div class="hours">
         ${items.map((f, i) => html`
           <div class="hr">
@@ -182,7 +191,7 @@ export class WetterApp extends LitElement {
     const span = Math.max(1, hi - lo);
     const pct = (v: number) => ((v - lo) / span) * 100;
     return html`
-      <div class="tile-h">${days.length}-Tage-Vorhersage</div>
+      ${head("mdi:calendar-week", `${days.length}-Tage-Vorhersage`)}
       ${days.map((d: ForecastItem, i) => {
         const l = d.templow ?? d.temperature ?? lo;
         const h = d.temperature ?? l;
@@ -225,27 +234,27 @@ export class WetterApp extends LitElement {
       : undefined;
 
     return html`
-      <section class="tile">${renderRangeSelector(this.range)}</section>
+      <section class="card">${renderRangeSelector(this.range)}</section>
       ${this._statsError ? html`<div class="warn">Statistik nicht verfügbar: ${this._statsError}</div>` : nothing}
       ${!st ? html`<div class="loading">Lade Historie …</div>` : html`
         <div class="grid">
-          <section class="tile kv">
-            <div class="tile-h">Temperatur</div>
+          <section class="card kv">
+            ${head("mdi:thermometer", "Temperatur")}
             <div class="big">${temp(agg(s.temperature, "mean"), 1)}</div>
             <div class="sub">Ø · min ${temp(agg(s.temperature, "min"), 1)} · max ${temp(agg(s.temperature, "max"), 1)}</div>
           </section>
-          <section class="tile kv">
-            <div class="tile-h">Regen</div>
+          <section class="card kv">
+            ${head("mdi:weather-pouring", "Regen")}
             <div class="big">${rain(rainSum)}</div>
             <div class="sub">Summe im Zeitraum</div>
           </section>
-          <section class="tile kv">
-            <div class="tile-h">Wind</div>
+          <section class="card kv">
+            ${head("mdi:weather-windy", "Wind")}
             <div class="big">${num(agg(s.wind_speed, "mean"))} km/h</div>
             <div class="sub">Ø · stärkste Böe ${num(agg(s.wind_gust, "max"))} km/h</div>
           </section>
-          <section class="tile kv">
-            <div class="tile-h">Luftfeuchte</div>
+          <section class="card kv">
+            ${head("mdi:water-percent", "Luftfeuchte")}
             <div class="big">${num(agg(s.humidity, "mean"), 0)} %</div>
             <div class="sub">Ø · min ${num(agg(s.humidity, "min"), 0)} % · max ${num(agg(s.humidity, "max"), 0)} %</div>
           </section>
@@ -256,75 +265,72 @@ export class WetterApp extends LitElement {
   }
 
   static styles = [
+    cardStyles,
     rangeStyles,
     css`
       :host { display: block; }
       .app {
-        color: #fff; border-radius: var(--ha-card-border-radius, 16px); padding: 20px 16px 24px;
-        min-height: 100%; box-sizing: border-box;
-        font-family: var(--ha-font-family-body, -apple-system, "Segoe UI", Roboto, sans-serif);
+        padding: 8px; box-sizing: border-box; max-width: 1100px; margin: 0 auto;
+        display: flex; flex-direction: column; gap: 12px;
       }
-      header { text-align: center; padding: 8px 0 16px; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.2); }
-      .place { font-size: 26px; font-weight: 500; }
-      .now { font-size: 84px; font-weight: 200; line-height: 1; margin: 2px 0 4px 18px; }
-      .cond { font-size: 19px; font-weight: 500; }
-      .hl { font-size: 17px; font-weight: 500; white-space: pre; }
 
-      .tabs {
-        display: flex; margin: 0 auto 14px; max-width: 360px; padding: 3px; gap: 2px;
-        background: rgba(0, 0, 0, 0.22); border-radius: 12px;
-      }
+      .hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; }
+      .hero-main { display: flex; align-items: center; gap: 12px; }
+      .hero-icon .wicon { width: 72px; height: 72px; }
+      .hero-temp { font-size: 56px; font-weight: 300; line-height: 1; }
+      .hero-info { text-align: right; min-width: 0; }
+      .place { font-size: 20px; font-weight: 500; }
+      .cond { font-size: 16px; color: var(--wa-text2); }
+      .hl { font-size: 14px; color: var(--wa-text2); margin-top: 2px; }
+
+      /* Tabs im Stil der HA-Oberfläche: Text + Unterstrich in Primärfarbe */
+      .tabs { display: flex; border-bottom: 1px solid var(--wa-divider); }
       .tabs button {
-        flex: 1; border: 0; background: none; color: inherit; font: inherit; font-size: 15px;
-        padding: 8px; border-radius: 9px; cursor: pointer; opacity: 0.8;
+        flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+        border: 0; background: none; color: var(--wa-text2); font: inherit; font-size: 14px; font-weight: 500;
+        padding: 12px 8px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
       }
-      .tabs button.on { background: rgba(255, 255, 255, 0.24); opacity: 1; font-weight: 600; }
+      .tabs button ha-icon { --mdc-icon-size: 20px; }
+      .tabs button.on { color: var(--wa-accent); border-bottom-color: var(--wa-accent); }
 
-      main { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+      main { display: flex; flex-direction: column; gap: 12px; }
       .cols, .grid { display: grid; gap: 12px; }
       .wide .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
       .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .wide .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
-      /* Kein backdrop-filter: auf schwachen Geräten (Echo Show) der größte Ruckel-Verursacher */
-      .tile { background: rgba(255, 255, 255, 0.13); border-radius: 18px; padding: 12px 14px; min-width: 0; }
-      .tile-h {
-        font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
-        opacity: 0.7; padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-      }
-      .wicon { width: 30px; height: 30px; display: block; }
-
       .hours { display: flex; overflow-x: auto; gap: 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
       .hours::-webkit-scrollbar { display: none; }
       .hr { flex: 0 0 52px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0; }
-      .hr .t { font-size: 13px; font-weight: 600; white-space: nowrap; }
-      .hr .p { font-size: 11px; color: #7fd0ff; font-weight: 600; min-height: 13px; }
-      .hr .v { font-size: 18px; font-weight: 500; }
+      .hr .t { font-size: 12px; color: var(--wa-text2); white-space: nowrap; }
+      .hr .wicon { width: 30px; height: 30px; }
+      .hr .p { font-size: 11px; color: var(--wa-rain); font-weight: 500; min-height: 13px; }
+      .hr .v { font-size: 16px; font-weight: 500; }
 
       .day {
-        display: grid; grid-template-columns: 52px 44px 36px 1fr 36px; align-items: center; gap: 8px;
-        padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        display: grid; grid-template-columns: 48px 40px 34px 1fr 34px; align-items: center; gap: 8px;
+        padding: 6px 0; border-bottom: 1px solid var(--wa-divider);
       }
       .day:last-child { border-bottom: 0; }
-      .wd { font-size: 17px; font-weight: 500; }
+      .wd { font-size: 15px; font-weight: 500; }
       .ic { display: flex; flex-direction: column; align-items: center; }
-      .ic .p { font-size: 11px; color: #7fd0ff; font-weight: 600; }
-      .lo { opacity: 0.6; text-align: right; font-size: 17px; }
-      .hi { text-align: right; font-size: 17px; font-weight: 500; }
-      .bar { position: relative; height: 5px; background: rgba(0, 0, 0, 0.25); border-radius: 3px; }
+      .ic .wicon { width: 28px; height: 28px; }
+      .ic .p { font-size: 11px; color: var(--wa-rain); font-weight: 500; }
+      .lo { color: var(--wa-text2); text-align: right; font-size: 15px; }
+      .hi { text-align: right; font-size: 15px; font-weight: 500; }
+      .bar { position: relative; height: 5px; background: var(--wa-track); border-radius: 3px; }
       .fill {
         position: absolute; top: 0; bottom: 0; border-radius: 3px;
-        background: linear-gradient(90deg, #5ac8fa, #8fd694, #ffd54a, #ff9f43);
+        background: linear-gradient(90deg, #42a5f5, #66bb6a, #ffca28, #ff7043);
       }
       .dot {
-        position: absolute; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
-        background: #fff; border: 2px solid rgba(0, 0, 0, 0.35); border-radius: 50%; box-sizing: border-box;
+        position: absolute; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; box-sizing: border-box;
+        background: var(--wa-text); border: 2px solid var(--ha-card-background, var(--card-background-color, #fff));
+        border-radius: 50%;
       }
 
-      .kv .big { font-size: 30px; font-weight: 500; margin-top: 4px; }
-      .kv .sub { font-size: 13px; opacity: 0.75; }
-      .loading, .hint { opacity: 0.7; text-align: center; padding: 16px; font-size: 14px; }
-      .warn { background: rgba(255, 120, 80, 0.25); border-radius: 12px; padding: 10px 14px; font-size: 14px; }
+      .kv .big { font-size: 26px; font-weight: 400; margin-top: 4px; }
+      .kv .sub { font-size: 13px; color: var(--wa-text2); }
     `,
   ];
 }

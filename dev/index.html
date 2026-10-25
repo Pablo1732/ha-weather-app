@@ -5,7 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Wetter-App Testseite</title>
   <style>
-    body { margin: 0; background: #111; font-family: Roboto, "Segoe UI", sans-serif; }
+    /* HA-Standard-Dark-Theme nachgestellt; ?light → helles Theme */
+    :root { --primary-background-color:#111111; --card-background-color:#1c1c1c; --primary-text-color:#e1e1e1;
+      --secondary-text-color:#9b9b9b; --divider-color:rgba(225,225,225,.12); --primary-color:#03a9f4; --rgb-primary-color:3,169,244; }
+    :root.light { --primary-background-color:#fafafa; --card-background-color:#fff; --primary-text-color:#212121;
+      --secondary-text-color:#727272; --divider-color:rgba(0,0,0,.12); }
+    body { margin: 0; background: var(--primary-background-color); font-family: Roboto, "Segoe UI", sans-serif; }
     #wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
     .bar { color: #aaa; font-size: 13px; padding-bottom: 8px; display: flex; gap: 12px; flex-wrap: wrap; }
     .bar label { cursor: pointer; }
@@ -25,6 +30,9 @@
     <wetter-app id="app"></wetter-app>
   </div>
   <script type="module">
+    const light = location.search.includes("light");
+    if (light) document.documentElement.classList.add("light");
+    window.mockHass.themes = { darkMode: !light };
     import "./out/mock.js";
     import "./out/wetter-app.js";
     const app = document.getElementById("app");
