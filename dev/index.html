@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wetter-App Testseite</title>
+  <style>
+    body { margin: 0; background: #111; font-family: Roboto, "Segoe UI", sans-serif; }
+    #wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .bar { color: #aaa; font-size: 13px; padding-bottom: 8px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .bar label { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div class="bar">
+      Testseite mit Beispieldaten ·
+      <label><input type="radio" name="sun" value="above_horizon" checked> Tag</label>
+      <label><input type="radio" name="sun" value="below_horizon"> Nacht</label>
+      <select id="cond">
+        <option>rainy</option><option>sunny</option><option>partlycloudy</option><option>cloudy</option>
+        <option>pouring</option><option>snowy</option><option>fog</option><option>lightning-rainy</option>
+      </select>
+    </div>
+    <wetter-app id="app"></wetter-app>
+  </div>
+  <script type="module">
+    import "./out/mock.js";
+    import "./out/wetter-app.js";
+    const app = document.getElementById("app");
+    const P = "sensor.wetterstat_brotzeithutte_";
+    app.setConfig({
+      type: "custom:wetter-app",
+      weather: "weather.weather_fusion_ai_kresslingweg",
+      name: "Kresslingweg",
+      sun: "sun.sun",
+      moon: "sensor.moon_phase",
+      sensors: {
+        temperature: P + "outdoor_temperature", humidity: P + "humidity", dewpoint: P + "dewpoint",
+        feels_like: P + "feels_like_temperature", pressure: P + "relative_pressure",
+        rain_total: P + "total_rain", rain_rate: P + "rain_rate", wind_speed: P + "wind_speed",
+        wind_gust: P + "wind_gust", wind_direction: P + "wind_direction", uv: P + "uv_index",
+        solar: P + "solar_radiation",
+      },
+    });
+    app.hass = window.mockHass;
+    // Zustandswechsel simulieren: neues hass-Objekt wie in HA
+    function patch(id, state) {
+      const h = window.mockHass;
+      window.mockHass = { ...h, states: { ...h.states, [id]: { ...h.states[id], state } } };
+      app.hass = window.mockHass;
+    }
+    document.querySelectorAll("input[name=sun]").forEach((r) => r.addEventListener("change", () => patch("sun.sun", r.value)));
+    document.getElementById("cond").addEventListener("change", (e) => patch("weather.weather_fusion_ai_kresslingweg", e.target.value));
+  </script>
+</body>
+</html>

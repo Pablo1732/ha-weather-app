@@ -1,0 +1,6 @@
+{
+  "name": "Wetter-App",
+  "filename": "wetter-app.js",
+  "render_readme": true,
+  "homeassistant": "2025.1.0"
+}
