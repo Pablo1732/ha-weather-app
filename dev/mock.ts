@@ -10,6 +10,7 @@ function st(id: string, state: string | number, attributes: Record<string, any> 
 const states: HomeAssistant["states"] = {
   "weather.weather_fusion_ai_kresslingweg": st("weather.weather_fusion_ai_kresslingweg", "rainy", {
     temperature: 2.8, humidity: 86, pressure: 932.3, wind_speed: 5, wind_bearing: 144,
+    latitude: 48.7067, longitude: 13.7744,
   }),
   "sun.sun": st("sun.sun", "above_horizon", {
     next_rising: "2026-10-26T05:38:11+00:00", next_setting: "2026-10-25T16:00:31+00:00",

@@ -14,6 +14,7 @@ export const cardStyles = css`
     --wa-accent: var(--primary-color);
     --wa-rain: var(--blue-color, #2196f3);
     --wa-track: rgba(127, 127, 127, 0.22);
+    --wa-radius: var(--ha-card-border-radius, 12px);
     /* Icon-Farben fürs helle Theme, .dark überschreibt */
     --wa-cloud: #b9c4cf;
     --wa-cloud2: #93a1ae;
@@ -28,10 +29,10 @@ export const cardStyles = css`
 
   .card {
     background: var(--ha-card-background, var(--card-background-color, #fff));
-    border-radius: var(--ha-card-border-radius, 12px);
+    border-radius: var(--wa-radius);
     border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, var(--wa-divider));
     box-shadow: var(--ha-card-box-shadow, none);
-    padding: 12px 16px;
+    padding: 12px 14px;
     min-width: 0;
     box-sizing: border-box;
   }
@@ -52,7 +53,7 @@ export const cardStyles = css`
 
   .warn {
     background: rgba(var(--rgb-warning-color, 255, 166, 0), 0.15); color: var(--wa-text);
-    border-radius: var(--ha-card-border-radius, 12px); padding: 10px 14px; font-size: 14px;
+    border-radius: var(--wa-radius); padding: 10px 14px; font-size: 14px;
   }
   .loading, .hint { color: var(--wa-text2); text-align: center; padding: 16px; font-size: 14px; }
 `;

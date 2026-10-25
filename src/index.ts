@@ -1,4 +1,6 @@
 import { WetterApp } from "./cards/wetter-app";
+import { WetterChart } from "./components/chart";
+import { WetterDayDetail } from "./components/day-detail";
 
 declare const __VERSION__: string;
 
@@ -6,7 +8,13 @@ const cards: [string, CustomElementConstructor, string, string][] = [
   ["wetter-app", WetterApp, "Wetter-App", "Komplette Wetter-App mit Vorhersage und Historie"],
 ];
 
-for (const [tag, cls] of cards) {
+// interne Bausteine (nicht im Kartenwähler)
+const parts: [string, CustomElementConstructor][] = [
+  ["wetter-app-chart", WetterChart],
+  ["wetter-app-day-detail", WetterDayDetail],
+];
+
+for (const [tag, cls] of [...parts, ...cards]) {
   // Doppelt geladene Ressource (z. B. alte + neue URL) darf nicht crashen
   if (!customElements.get(tag)) customElements.define(tag, cls);
 }

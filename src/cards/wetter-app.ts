@@ -5,6 +5,8 @@ import { RangeController } from "../data/range-sync";
 import { fetchStatistics } from "../data/statistics";
 import { rangeStyles, renderRangeSelector } from "../components/range-selector";
 import { cardStyles, head } from "../components/styles";
+import { renderTiles, tileStyles } from "../components/tiles";
+import type { Metric } from "../components/day-detail";
 import type { ForecastItem, HomeAssistant, StatResult, WetterConfig } from "../types";
 import { conditionLabel, tint } from "../util/conditions";
 import { hour, num, rain, stateNum, temp, weekday } from "../util/format";
@@ -20,6 +22,9 @@ export class WetterApp extends LitElement {
     _stats: { state: true },
     _statsError: { state: true },
     _wide: { state: true },
+    _detail: { state: true },
+    _metric: { state: true },
+    _recent: { state: true },
   };
 
   hass?: HomeAssistant;
@@ -29,6 +34,11 @@ export class WetterApp extends LitElement {
   private _statsError?: string;
   private _statsKey?: string;
   private _wide = false;
+  /** geöffnetes Tagesdetail (Index in der Tagesvorhersage) */
+  private _detail?: number;
+  private _metric: Metric = "temp";
+  private _recent?: StatResult;
+  private _recentKey?: string;
   private _ro?: ResizeObserver;
 
   private hourly = new ForecastController(this, "hourly", () => this._config?.weather);
@@ -86,6 +96,29 @@ export class WetterApp extends LitElement {
 
   protected updated(): void {
     if (this._tab === "history") this.loadStats(this.range.range);
+    else this.loadRecent();
+  }
+
+  /** Letzte 24 h stündlich: Regen gemessen + Luftdruck-Tendenz für die Kacheln. */
+  private loadRecent(): void {
+    const s = this._config.sensors ?? {};
+    const ids = [s.rain_total, s.pressure].filter(Boolean) as string[];
+    if (!this.hass || !ids.length) return;
+    const end = Math.ceil(Date.now() / 300_000) * 300_000;
+    const key = String(end);
+    if (key === this._recentKey) return;
+    this._recentKey = key;
+    fetchStatistics(this.hass, {
+      ids, start: new Date(end - 86_400_000), end: new Date(end), period: "hour", types: ["mean", "change"],
+    }).then(
+      (r) => key === this._recentKey && (this._recent = r),
+      () => (this._recentKey = undefined),
+    );
+  }
+
+  private openDetail(index: number, metric: Metric = this._metric): void {
+    this._metric = metric;
+    this._detail = index;
   }
 
   private async loadStats(r: TimeRange): Promise<void> {
@@ -156,6 +189,14 @@ export class WetterApp extends LitElement {
         <section class="card">${this.renderHourly(nowTemp, night)}</section>
         <section class="card">${this.renderDaily(nowTemp)}</section>
       </div>
+      ${renderTiles({ hass: this.hass!, config: this._config, hourly: this.hourly.forecast, recent: this._recent })}
+      ${this._detail != null && this.daily.forecast
+        ? html`<wetter-app-day-detail .hass=${this.hass} .config=${this._config} .hourly=${this.hourly.forecast ?? []}
+            .daily=${this.daily.forecast} .index=${this._detail} .metric=${this._metric}
+            @close=${() => (this._detail = undefined)}
+            @select=${(e: CustomEvent) => (this._detail = e.detail.index)}
+            @metric=${(e: CustomEvent) => (this._metric = e.detail.metric)}></wetter-app-day-detail>`
+        : nothing}
     `;
   }
 
@@ -168,7 +209,7 @@ export class WetterApp extends LitElement {
       ${head("mdi:clock-outline", "Stündlich")}
       <div class="hours">
         ${items.map((f, i) => html`
-          <div class="hr">
+          <div class="hr" @click=${() => this.openDetail(0, "temp")}>
             <div class="t">${i === 0 ? "Jetzt" : hour(new Date(f.datetime))}</div>
             ${weatherIcon(f.condition, i === 0 ? night : f.is_daytime === false)}
             <div class="p">${(f.precipitation_probability ?? 0) >= 20 ? `${Math.round(f.precipitation_probability!)} %` : ""}</div>
@@ -195,7 +236,8 @@ export class WetterApp extends LitElement {
         const fw = Math.max(0.5, pct(h) - pct(l));
         const grad = `background-size:${(100 / fw) * 100}% 100%;background-position:${fw >= 100 ? 0 : (pct(l) / (100 - fw)) * 100}% 0`;
         return html`
-          <div class="day">
+          <div class="day" role="button" tabindex="0" @click=${() => this.openDetail(i)}
+            @keydown=${(e: KeyboardEvent) => e.key === "Enter" && this.openDetail(i)}>
             <div class="wd">${weekday(new Date(d.datetime))}</div>
             <div class="ic">
               ${weatherIcon(d.condition)}
@@ -263,6 +305,7 @@ export class WetterApp extends LitElement {
   static styles = [
     cardStyles,
     rangeStyles,
+    tileStyles,
     css`
       :host { display: block; }
       /* Dezenter Wetter-Farbton oben, läuft in den Theme-Hintergrund aus */
@@ -273,11 +316,15 @@ export class WetterApp extends LitElement {
       }
       .app > * { width: 100%; max-width: 1100px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
       /* Ganzseiten-Modus (Panel-Ansicht): ganze Fläche, keine Rundung */
-      .app.page { border-radius: 0; min-height: calc(100vh - var(--header-height, 56px)); padding: 24px 16px; }
+      /* Panel-Ansicht setzt --ha-card-border-radius: 0 → innere Karten bekommen den HA-Standardradius */
+      .app.page {
+        border-radius: 0; min-height: calc(100vh - var(--header-height, 56px)); padding: 20px 10px;
+        --wa-radius: var(--ha-border-radius-lg, 12px);
+      }
 
       header { text-align: center; padding: 8px 0 12px; }
       .place { font-size: 28px; font-weight: 500; }
-      .now { font-size: 88px; font-weight: 200; line-height: 1; margin: 2px 0 4px 20px; }
+      .now { font-size: 88px; font-weight: 600; line-height: 1; margin: 2px 0 4px 20px; }
       .cond { font-size: 20px; font-weight: 500; }
       .hl { font-size: 17px; font-weight: 500; white-space: pre; }
 
@@ -299,7 +346,7 @@ export class WetterApp extends LitElement {
 
       .hours { display: flex; overflow-x: auto; gap: 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
       .hours::-webkit-scrollbar { display: none; }
-      .hr { flex: 0 0 52px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0; }
+      .hr { flex: 1 0 54px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0; }
       .hr .t { font-size: 12px; color: var(--wa-text2); white-space: nowrap; }
       .hr .wicon { width: 30px; height: 30px; }
       .hr .p { font-size: 11px; color: var(--wa-rain); font-weight: 500; min-height: 13px; }
@@ -310,6 +357,8 @@ export class WetterApp extends LitElement {
         padding: 6px 0; border-bottom: 1px solid var(--wa-divider);
       }
       .day:last-child { border-bottom: 0; }
+      .day, .hr { cursor: pointer; border-radius: 8px; }
+      .day:hover, .hr:hover { background: rgba(127, 127, 127, 0.08); }
       .wd { font-size: 15px; font-weight: 500; }
       .ic { display: flex; flex-direction: column; align-items: center; }
       .ic .wicon { width: 28px; height: 28px; }

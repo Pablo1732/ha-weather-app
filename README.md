@@ -2,11 +2,13 @@
 
 Wetter-App als Lovelace-Karte, angelehnt an Apple Wetter: aktuelle Werte der eigenen Wetterstation, Vorhersage aus einer `weather.*`-Entität und Historie mit einem gemeinsamen Zeitraum-Wähler. Schlank gebaut, damit sie auch auf schwachen Geräten (z. B. Echo Show) flüssig läuft.
 
-> **Status:** frühe Entwicklung (Schritt 1 von 5). Diagramme, Detailansichten und Einzelkarten folgen.
+> **Status:** in Entwicklung (Schritt 2 von 5). Historie-Diagramme und Einzelkarten folgen.
 
 ## Features
 - Tabs **Vorhersage** / **Historie**
 - Stundenleiste und Tagesliste mit Temperaturbalken
+- Tagesdetail per Klick: Stundendiagramm für Temperatur, Niederschlag, Wind — heute inkl. gemessener Werte der Station
+- Kacheln: Wind-Kompass, gefühlte Temperatur, Niederschlag (24 h gemessen/erwartet), Luftdruck-Tendenz, Feuchte/Taupunkt, UV, Sonnenbogen, Mondphase
 - Gemeinsamer Zeitraum: Tag · 7 Tage · 30 Tage · Monat · Jahr, mit ‹ › blättern
 - Dezenter Hintergrund passend zu Wetter und Tag/Nacht, sonst HA-Theme-Farben
 - Nur offizielle HA-Schnittstellen (`weather/subscribe_forecast`, `recorder/statistics_during_period`) → robust bei HA-Updates
