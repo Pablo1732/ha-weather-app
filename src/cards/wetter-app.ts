@@ -103,6 +103,7 @@ export class WetterApp extends LitElement {
     if (changed.size > 1 || !changed.has("hass")) return true;
     const old = changed.get("hass") as HomeAssistant | undefined;
     if (!old || !this.hass || !this._config) return true;
+    if (old.themes?.darkMode !== this.hass.themes?.darkMode) return true;
     return this.watchedIds().some((id) => old.states[id] !== this.hass!.states[id]);
   }
 

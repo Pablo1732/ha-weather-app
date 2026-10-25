@@ -23,6 +23,8 @@
       Testseite mit Beispieldaten ·
       <label><input type="radio" name="sun" value="above_horizon" checked> Tag</label>
       <label><input type="radio" name="sun" value="below_horizon"> Nacht</label>
+      <label><input type="radio" name="theme" value="dark"> Dunkel</label>
+      <label><input type="radio" name="theme" value="light"> Hell</label>
       <select id="cond">
         <option>rainy</option><option>sunny</option><option>partlycloudy</option><option>cloudy</option>
         <option>pouring</option><option>snowy</option><option>fog</option><option>lightning-rainy</option><option>lightning</option><option>clear-night</option><option>snowy-rainy</option><option>windy</option><option>hail</option>
@@ -63,6 +65,18 @@
       app.hass = window.mockHass;
     }
     document.querySelectorAll("input[name=sun]").forEach((r) => r.addEventListener("change", () => patch("sun.sun", r.value)));
+    // Theme-Wechsel ohne Neuladen: Seitenfarben + hass.themes.darkMode wie in HA
+    document.querySelector(`input[name=theme][value=${light ? "light" : "dark"}]`).checked = true;
+    document.querySelectorAll("input[name=theme]").forEach((r) => r.addEventListener("change", () => {
+      const dark = r.value === "dark";
+      document.documentElement.classList.toggle("light", !dark);
+      window.mockHass = { ...window.mockHass, themes: { ...window.mockHass.themes, darkMode: dark } };
+      app.hass = window.mockHass;
+      const u = new URL(location.href);
+      u.search = u.search.replace(/[?&]light/, "").replace(/^&/, "?");
+      if (!dark) u.search += (u.search ? "&" : "?") + "light";
+      history.replaceState(null, "", u.search ? u.search : u.pathname);
+    }));
     document.getElementById("cond").addEventListener("change", (e) => patch("weather.weather_fusion_ai_kresslingweg", e.target.value));
   </script>
 </body>
