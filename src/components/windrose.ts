@@ -99,7 +99,7 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
       return svg`<path d=${wedge(i, r1, rad(acc))} style="fill:${BFT[c].color}" class=${dim(c)}><title>${DIRS[i]}, Bft ${BFT[c].label}: ${num(pct(n), 1)} %</title></path>`;
     });
   });
-  const ticks = DIRS.map((_, i) => i % 4 === 0 ? svg`` : svg`<text x=${100 + 101 * Math.cos(ang(i * 22.5))} y=${103 + 101 * Math.sin(ang(i * 22.5))} class=${i % 2 ? "cd2" : "cd"}>${DIRS[i]}</text>`);
+  const ticks = DIRS.map((_, i) => i % 4 === 0 ? svg`` : svg`<text x=${100 + 109 * Math.cos(ang(i * 22.5))} y=${103 + 109 * Math.sin(ang(i * 22.5))} class=${i % 2 ? "cd2" : "cd"}>${DIRS[i]}</text>`);
   // aktuelle Richtung: roter Pfeil am Rand, zeigt nach innen (Wind kommt aus dieser Richtung)
   const dirArrow = now.direction != null
     ? svg`<path d="M100 ${100 - R - 1} l-5 -9 h10z" class="now" transform="rotate(${now.direction} 100 100)"><title>Aktuell: ${Math.round(now.direction)}°</title></path>`
@@ -118,6 +118,10 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
     const b = shown[ni], hi = Number.isFinite(b.max) ? b.max : b.min + 20;
     nowPos = startOf(ni) + Math.min(1, (now.speed! - b.min) / (hi - b.min)) * (b.w / wSum) * 100;
   }
+  // Prozent nur ins Feld schreiben, wenn es reinpasst (Leiste ≈ 300 px, ~6 px je Zeichen) — sonst steht's im Detail
+  const fits = (b: { w: number }, text: string) => (b.w / wSum) * 300 >= text.length * 6 + 6;
+  // Detail am Rand nicht abschneiden: links bündig am linken, rechts bündig am rechten Ende, dazwischen gleitend
+  const tipStyle = (c: number) => `left:${c}%;transform:translateX(-${c}%)`;
   const label = (v: number) => (v >= 1 ? `${Math.round(v)}%` : v >= 0.05 ? `${num(v, 1)}%` : "<0,1%");
   const sel = o.selected != null ? BFT[o.selected] : undefined;
   // Maus: Hover zeigt Details; Touch: Antippen schaltet um
@@ -131,28 +135,28 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
 
   return html`
     <div class="rose">
-      <svg viewBox="-14 -14 228 228">
+      <svg viewBox="-22 -22 244 244">
         ${rings}
         <line x1="100" y1="8" x2="100" y2="192" class="ring"/><line x1="8" y1="100" x2="192" y2="100" class="ring"/>
         ${wedges}
         <circle cx="100" cy="100" r=${R0 - 1} style="fill:${BFT[0].color}" class=${dim(0)}/>
         <text x="100" y="103.5" class="cv">${Math.round(pct(totals[0]))} %</text>
         ${ringLabels}
-        <text x="100" y="2" class="cd">N</text><text x="100" y="208" class="cd">S</text>
-        <text x="203" y="103" class="cd">O</text><text x="-3" y="103" class="cd">W</text>
+        <text x="100" y="-6" class="cd">N</text><text x="100" y="216" class="cd">S</text>
+        <text x="211" y="103" class="cd">O</text><text x="-11" y="103" class="cd">W</text>
         ${ticks}
         ${dirArrow}
       </svg>
       <div class="bftbar">
         ${nowPos != null ? html`<span class="nowsp" style="left:${nowPos}%" title="Aktuell: ${num(now.speed, 1)} km/h"></span>` : ""}
-        ${sel && si >= 0 ? html`<div class="btip ${o.up ? "up" : ""}" style="left:${startOf(si) + (shown[si].w / wSum) * 50}%">
+        ${sel && si >= 0 ? html`<div class="btip ${o.up ? "up" : ""}" style=${tipStyle(startOf(si) + (shown[si].w / wSum) * 50)}>
           <div class="tr"><i style="background:${sel.color}"></i><b>Beaufort ${sel.label}</b></div>
           <div class="tr"><span>${sel.name}</span></div>
           <div class="tr"><span>Wind</span><b>${range(sel)} km/h</b></div>
           <div class="tr"><span>Anteil</span><b>${label(pct(totals[o.selected!]))}</b></div>
         </div>` : ""}
         <div class="segs">${shown.map((b) => html`<button style="flex:${b.w} 1 0;background:${b.color};color:${b.text}" class=${o.selected === b.i ? "on" : ""}
-          @click=${(e: Event) => pick(e, b.i)} @pointerenter=${(e: PointerEvent) => enter(e, b.i)} @pointerleave=${leave}>${label(b.share)}</button>`)}</div>
+          @click=${(e: Event) => pick(e, b.i)} @pointerenter=${(e: PointerEvent) => enter(e, b.i)} @pointerleave=${leave}>${fits(b, label(b.share)) ? label(b.share) : ""}</button>`)}</div>
         <div class="nums">${shown.map((b) => html`<span style="flex:${b.w} 1 0" @click=${(e: Event) => pick(e, b.i)} @pointerenter=${(e: PointerEvent) => enter(e, b.i)} @pointerleave=${leave}>${b.label}</span>`)}</div>
         <div class="bl">Beaufort</div>
       </div>
@@ -161,7 +165,7 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
 
 export const windroseStyles = css`
   .rose { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-  .rose svg { width: 100%; max-width: 320px; }
+  .rose svg { width: 100%; max-width: 340px; }
   .rose .dim { opacity: 0.25; }
   .ring { fill: none; stroke: var(--wa-divider); stroke-width: 0.8; }
   .rl {
@@ -180,7 +184,7 @@ export const windroseStyles = css`
   .nums span { min-width: 0; text-align: center; cursor: pointer; }
   .bl { text-align: center; font-size: 12px; color: var(--wa-text2); margin-top: 2px; }
   .btip {
-    position: absolute; top: 34px; transform: translateX(-50%); pointer-events: none; z-index: 1; min-width: 130px;
+    position: absolute; top: 34px; pointer-events: none; z-index: 1; min-width: 130px;
     background: var(--card-background-color, #222); color: var(--primary-text-color);
     border: 1px solid var(--divider-color); border-radius: 8px; padding: 6px 8px; font-size: 12px; line-height: 1.5;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); white-space: nowrap;

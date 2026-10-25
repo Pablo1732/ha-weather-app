@@ -33,7 +33,7 @@ export const rangeStyles = css`
   .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
   .chips button {
     border: 1px solid var(--wa-divider); background: none; color: var(--wa-text); font: inherit; font-size: 13px;
-    padding: 6px 14px; border-radius: 16px; cursor: pointer; white-space: nowrap;
+    padding: 6px 11px; border-radius: 16px; cursor: pointer; white-space: nowrap;
   }
   .chips button.on {
     border-color: transparent; color: var(--wa-accent); font-weight: 500;

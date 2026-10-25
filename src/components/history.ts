@@ -6,7 +6,7 @@ import type { HomeAssistant, StatPeriod, StatResult, StatValue, WetterConfig } f
 import { num, rain, stateNum, temp } from "../util/format";
 import type { ChartSeries, ChartTick } from "./chart";
 import { rangeStyles, renderRangeSelector } from "./range-selector";
-import { cardStyles, head } from "./styles";
+import { cardStyles, head, legend, legendStyles } from "./styles";
 import { renderWindrose, windroseStyles } from "./windrose";
 import { onOtherTip, tipOpened } from "../util/tip-bus";
 
@@ -266,8 +266,7 @@ export class WetterHistory extends LitElement {
     }
     return html`<section class="card">${head("mdi:thermometer", "Temperatur")}
       ${this.chart(r, series, { yUnit: "°", period: p.main })}
-      <div class="legend"><i style="background:#4fc3f7"></i>Min–Max<i class="ln" style="background:#ffb74d"></i>Durchschnitt
-        ${d.prev ? html`<i class="ln dash"></i>Vorjahr` : nothing}</div>
+      ${legend([{ color: "#4fc3f7", label: "Min–Max" }, { color: "#ffb74d", label: "Durchschnitt", kind: "line" }, !!d.prev && { label: "Vorjahr", kind: "dash" }])}
     </section>`;
   }
 
@@ -291,8 +290,11 @@ export class WetterHistory extends LitElement {
     }
     return html`<section class="card">${head("mdi:weather-pouring", "Niederschlag")}
       ${this.chart(r, series, { yMin: 0, period: p.rain })}
-      <div class="legend"><i style="background:var(--wa-rain)"></i>${p.rain === "hour" ? "pro Stunde" : r.preset === "year" ? "pro Monat" : "pro Tag"}
-        <i class="ln" style="background:var(--wa-prob, #90caf9)"></i>Summe (rechte Skala)${d.prev ? html`<i class="ln dash"></i>Vorjahr` : nothing}</div>
+      ${legend([
+        { color: "var(--wa-rain)", label: p.rain === "hour" ? "pro Stunde" : r.preset === "year" ? "pro Monat" : "pro Tag" },
+        { color: "var(--wa-prob, #90caf9)", label: "Summe (blaue Skala links)", kind: "line" },
+        !!d.prev && { label: "Vorjahr", kind: "dash" },
+      ])}
     </section>`;
   }
 
@@ -321,7 +323,7 @@ export class WetterHistory extends LitElement {
         },
       }) : nothing}
       ${this.chart(r, series, { yMin: 0, period: p.main, height: 160 })}
-      <div class="legend"><i class="ln" style="background:#81c784"></i>Durchschnitt<i class="ln" style="background:#ffb74d"></i>stärkste Böe</div>
+      ${legend([{ color: "#81c784", label: "Durchschnitt", kind: "line" }, { color: "#ffb74d", label: "stärkste Böe", kind: "line" }])}
     </section>`;
   }
 
@@ -340,7 +342,7 @@ export class WetterHistory extends LitElement {
     return html`<section class="card">${head("mdi:chart-bell-curve-cumulative", "Weitere Werte")}
       <div class="chips small">${avail.map((e) => html`<button class=${e === cur ? "on" : ""} @click=${() => (this._extra = e.id)}>${e.label}</button>`)}</div>
       ${this.chart(r, series, { period: p.main, yMin: cur.id === "pressure" ? undefined : 0 })}
-      <div class="legend"><i class="ln" style="background:${cur.color}"></i>Durchschnitt<i style="background:${cur.color};opacity:.3"></i>Min–Max</div>
+      ${legend([{ color: cur.color, label: "Durchschnitt", kind: "line" }, { color: cur.color, label: "Min–Max", opacity: 0.3 }])}
     </section>`;
   }
 
@@ -370,6 +372,7 @@ export class WetterHistory extends LitElement {
 
   static styles = [
     cardStyles,
+    legendStyles,
     rangeStyles,
     windroseStyles,
     css`
@@ -378,7 +381,8 @@ export class WetterHistory extends LitElement {
       .body { display: flex; flex-direction: column; gap: 12px; transition: opacity 0.15s; }
       .body.stale { opacity: 0.45; pointer-events: none; }
       :host([wide]) .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
-      .grid { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
+      /* auto-fit: vorhandene Kacheln teilen sich die ganze Breite statt rechts eine Lücke zu lassen */
+      .grid { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
       .kv .big { font-size: 26px; font-weight: 600; margin-top: 4px; }
       .kv .sub { font-size: 12px; color: var(--wa-text2); margin-bottom: 6px; }
       .ext { display: flex; align-items: baseline; gap: 6px; font-size: 14px; flex-wrap: wrap; }
@@ -396,10 +400,6 @@ export class WetterHistory extends LitElement {
       /* oben so viel Luft wie unten bis zum Diagramm (dessen Innenabstand oben) */
       .chips.small { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 2px; }
       .chips.small button { line-height: 18px; }
-      .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12px; color: var(--wa-text2); margin-top: 6px; }
-      .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: -6px; }
-      .legend i.ln { height: 3px; }
-      .legend i.dash { height: 0; border-top: 2px dashed var(--wa-text2); background: none; }
       .hint-inline { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--wa-text2); justify-content: center; }
       .hint-inline ha-icon { --mdc-icon-size: 16px; }
       .months { width: 100%; border-collapse: collapse; font-size: 14px; }

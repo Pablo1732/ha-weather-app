@@ -239,18 +239,22 @@ export class WetterChart extends LitElement {
       parts.push(svg`<text x=${w - PAD.r + 6} y=${y + 4} class="ylab">${fmtTick(v)}${this.yUnit}</text>`);
     }
     // rechte Skala (z. B. Summe/Wahrscheinlichkeit): Beschriftung links innen, in der Farbe der Serie
+    // (wird nach den Serien gezeichnet, mit Kontur → nicht von Balken/Linien verdeckt)
+    const rightLabels: SVGTemplateResult[] = [];
     if (R) {
       const col = this.series.find((s) => s.axis === "right")!.color;
       for (const v of R.ticks) {
         if (v === 0) continue;
-        parts.push(svg`<text x=${PAD.l + 3} y=${R.y(v) - 3} class="rlab" style="fill:${col}">${fmtTick(v)}${this.rightUnit}</text>`);
+        rightLabels.push(svg`<text x=${PAD.l + 3} y=${R.y(v) - 3} class="rlab" style="fill:${col}">${fmtTick(v)}${this.rightUnit}</text>`);
       }
     }
     for (const tk of this.ticks) {
       const x = this.x(tk.t);
       if (x < PAD.l - 1 || x > w - PAD.r + 1) continue;
       parts.push(svg`<line x1=${x} x2=${x} y1=${PAD.t} y2=${bottom} class="vgrid"/>`);
-      parts.push(svg`<text x=${x + 3} y=${this.height - 6} class="xlab">${tk.label}</text>`);
+      // ganz rechts: rechtsbündig vor die Linie, sonst kollidiert es mit der Y-Beschriftung
+      const end = x + 3 + tk.label.length * 6 > w - PAD.r;
+      parts.push(svg`<text x=${end ? x - 3 : x + 3} y=${this.height - 6} class="xlab" style=${end ? "text-anchor:end" : ""}>${tk.label}</text>`);
     }
 
     // Serien
@@ -345,7 +349,7 @@ export class WetterChart extends LitElement {
       <div class="wrap">
         ${tip}
         <svg width=${w} height=${this.height} @pointermove=${this.onPointer} @pointerdown=${this.onPointer}
-          @pointerleave=${(e: PointerEvent) => { if (e.pointerType !== "touch") this._hover = undefined; }}>${parts}</svg>
+          @pointerleave=${(e: PointerEvent) => { if (e.pointerType !== "touch") this._hover = undefined; }}>${parts}${rightLabels}</svg>
       </div>
     `;
   }
@@ -357,7 +361,10 @@ export class WetterChart extends LitElement {
     .grid { stroke: var(--divider-color, rgba(127, 127, 127, 0.2)); stroke-width: 1; }
     .vgrid { stroke: var(--divider-color, rgba(127, 127, 127, 0.2)); stroke-dasharray: 2 3; }
     .ylab, .xlab { fill: var(--secondary-text-color); font-size: 11px; }
-    .rlab { font-size: 10px; opacity: 0.85; }
+    .rlab {
+      font-size: 10px; font-weight: 500; paint-order: stroke; stroke-width: 3px; stroke-linejoin: round;
+      stroke: var(--ha-card-background, var(--card-background-color, #1c1c1c));
+    }
     .past { fill: rgba(127, 127, 127, 0.08); }
     .ln { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
     .mk { fill: var(--primary-text-color); stroke: var(--card-background-color, #000); stroke-width: 2; }

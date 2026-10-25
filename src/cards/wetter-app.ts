@@ -67,6 +67,35 @@ export class WetterApp extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this._ro?.disconnect();
+    this.syncDetail();
+  }
+
+  /**
+   * Tagesdetail hängt direkt an <body>: innerhalb der Karte würde es von HA-Containern (Ebenen, Transforms)
+   * eingesperrt — am iPhone unter der HA-Kopfleiste, am PC nur über dem Kartenbereich statt mittig.
+   */
+  private _detailEl?: HTMLElement & Record<string, unknown>;
+  private syncDetail(): void {
+    const open = this.isConnected && this._tab === "forecast" && this._detail != null && !!this.daily.forecast;
+    if (!open) {
+      this._detailEl?.remove();
+      this._detailEl = undefined;
+      return;
+    }
+    let el = this._detailEl;
+    if (!el) {
+      el = document.createElement("wetter-app-day-detail") as HTMLElement & Record<string, unknown>;
+      el.addEventListener("close", () => (this._detail = undefined));
+      el.addEventListener("select", (e) => (this._detail = (e as CustomEvent).detail.index));
+      el.addEventListener("metric", (e) => (this._metric = (e as CustomEvent).detail.metric));
+      document.body.appendChild(el);
+      this._detailEl = el;
+    }
+    Object.assign(el, {
+      hass: this.hass, config: this._config, hourly: this.hourly.forecast ?? [],
+      daily: this.daily.forecast, index: this._detail, metric: this._metric,
+    });
+    el.classList.toggle("dark", !!this.hass?.themes?.darkMode);
   }
 
   // Nur neu rendern, wenn sich eine relevante Entität geändert hat — hass ändert sich bei jedem State im Haus.
@@ -84,6 +113,7 @@ export class WetterApp extends LitElement {
 
   protected updated(): void {
     if (this._tab === "forecast") this.loadRecent();
+    this.syncDetail();
   }
 
   /** Letzte 24 h stündlich: Regen gemessen + Luftdruck-Tendenz für die Kacheln. */
@@ -132,7 +162,7 @@ export class WetterApp extends LitElement {
         <nav class="tabs" role="tablist">
           ${(["forecast", "history"] as Tab[]).map((t) => html`
             <button role="tab" aria-selected=${this._tab === t} class=${this._tab === t ? "on" : ""}
-              @click=${() => (this._tab = t)}>
+              @click=${() => { this._tab = t; this._detail = undefined; }}>
               <ha-icon icon=${t === "forecast" ? "mdi:calendar-arrow-right" : "mdi:chart-line"}></ha-icon>
               ${t === "forecast" ? "Vorhersage" : "Historie"}
             </button>`)}
@@ -154,13 +184,6 @@ export class WetterApp extends LitElement {
         </div>
         <section class="card daily">${this.renderDaily(nowTemp)}</section>
       </div>
-      ${this._detail != null && this.daily.forecast
-        ? html`<wetter-app-day-detail .hass=${this.hass} .config=${this._config} .hourly=${this.hourly.forecast ?? []}
-            .daily=${this.daily.forecast} .index=${this._detail} .metric=${this._metric}
-            @close=${() => (this._detail = undefined)}
-            @select=${(e: CustomEvent) => (this._detail = e.detail.index)}
-            @metric=${(e: CustomEvent) => (this._metric = e.detail.metric)}></wetter-app-day-detail>`
-        : nothing}
     `;
   }
 
@@ -232,7 +255,7 @@ export class WetterApp extends LitElement {
         border-radius: var(--ha-card-border-radius, 12px);
         background: linear-gradient(180deg, var(--wa-tint) 0, transparent 520px), var(--primary-background-color, #111);
       }
-      .app { position: relative; --wa-drop: rgba(40, 70, 110, 0.3); --wa-flake: rgba(90, 110, 140, 0.55); --wa-cloudbg: rgba(120, 135, 155, 0.22); }
+      .app { position: relative; --wa-drop: rgba(40, 70, 110, 0.3); --wa-flake: rgba(90, 110, 140, 0.55); --wa-cloudbg: rgba(120, 135, 155, 0.15); }
       .app.dark { --wa-drop: rgba(255, 255, 255, 0.3); --wa-flake: rgba(255, 255, 255, 0.75); --wa-cloudbg: rgba(255, 255, 255, 0.11); }
       .app > header, .app > nav, .app > main { position: relative; z-index: 1; }
       .app > :not(.sky) { width: 100%; max-width: 1200px; margin-left: auto; margin-right: auto; box-sizing: border-box; }

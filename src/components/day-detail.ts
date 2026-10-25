@@ -6,7 +6,7 @@ import { compass, num, rain, stateNum, temp } from "../util/format";
 import { weatherIcon } from "../util/icons";
 import { temperatureBlender } from "../util/blend";
 import type { ChartMarker, ChartSeries, ChartTick } from "./chart";
-import { cardStyles } from "./styles";
+import { cardStyles, legend, legendStyles } from "./styles";
 
 export type Metric = "temp" | "rain" | "wind";
 
@@ -167,10 +167,15 @@ export class WetterDayDetail extends LitElement {
     }
     const speeds = hours.map((h) => h.wind_speed).filter((v): v is number => v != null);
     const avg = speeds.length ? speeds.reduce((a, b) => a + b, 0) / speeds.length : day.wind_speed;
+    // Tagesrichtung fehlt oft in der Tagesvorhersage → Vektormittel der Stundenwerte
+    const bearings = hours.map((h) => h.wind_bearing).filter((v): v is number => v != null);
+    const bearing = day.wind_bearing ?? (bearings.length
+      ? (Math.atan2(bearings.reduce((a, d) => a + Math.sin((d * Math.PI) / 180), 0), bearings.reduce((a, d) => a + Math.cos((d * Math.PI) / 180), 0)) * 180) / Math.PI
+      : undefined);
     const gust = s.wind_gust && isToday ? Math.max(...this.pastRows(s.wind_gust).map((r) => r.max ?? 0), 0) : undefined;
     return html`<div class="sum">
       <div>
-        <div class="big">${num(avg, 0)} km/h <span class="dir">${compass(day.wind_bearing)}</span></div>
+        <div class="big">${num(avg, 0)} km/h ${bearing != null ? html`<span class="dir">${compass(bearing)}</span>` : nothing}</div>
         <div class="sub">Ø Vorhersage · max ${num(speeds.length ? Math.max(...speeds) : undefined, 0)} km/h${gust ? ` · stärkste Böe heute ${num(gust, 0)} km/h` : ""}</div>
       </div>
     </div>`;
@@ -231,8 +236,11 @@ export class WetterDayDetail extends LitElement {
         .timeFormat=${(t: number) => new Date(t).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}>
       </wetter-app-chart>
       ${this.metric === "wind" ? this.renderWindDirs(start, future) : nothing}
-      ${this.metric === "rain" ? html`<div class="legend"><i style="background:var(--wa-rain)"></i>Menge pro Stunde
-        <i class="ln" style="background:var(--wa-prob, #90caf9)"></i>Wahrscheinlichkeit${now ? html`<i style="background:var(--wa-rain-past, #1e6fb8)"></i>gemessen` : nothing}</div>` : nothing}
+      ${this.metric === "rain" ? legend([
+        { color: "var(--wa-rain)", label: "Menge pro Stunde" },
+        { color: "var(--wa-prob, #90caf9)", label: "Wahrscheinlichkeit", kind: "line" },
+        !!now && { color: "var(--wa-rain-past, #1e6fb8)", label: "gemessen" },
+      ]) : nothing}
     `;
   }
 
@@ -242,15 +250,22 @@ export class WetterDayDetail extends LitElement {
     return html`<div class="dirs">
       ${step.map((p) => html`<div style="left:calc(6px + (100% - 44px) * ${(p.t - start) / (24 * HOUR)})">
         <ha-icon icon="mdi:navigation" style="transform:rotate(${(p.h.wind_bearing ?? 0) + 180}deg)"></ha-icon>
-        <span>${new Date(p.t).getHours()} Uhr</span></div>`)}
+        <span>${new Date(p.t).getHours()}</span></div>`)}
     </div>`;
   }
 
   static styles = [
     cardStyles,
+    legendStyles,
     css`
-      :host { position: fixed; inset: 0; z-index: 8; display: flex; justify-content: center; align-items: stretch; }
-      .backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+      /* hängt direkt an <body> → Schrift und Farben selbst setzen */
+      :host {
+        position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 9; display: flex; justify-content: center; align-items: stretch;
+        font-family: var(--ha-font-family-body, var(--mdc-typography-font-family, Roboto, Noto, sans-serif));
+        -webkit-font-smoothing: antialiased; line-height: 1.4;
+      }
+      :host(.dark) { --wa-cloud: #e6eaef; --wa-cloud2: #aab4bf; --wa-moon: #e9edf5; }
+      .backdrop { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0, 0, 0, 0.55); }
       .sheet {
         position: relative; width: 100%; max-width: 720px; overflow-y: auto; box-sizing: border-box;
         background: var(--primary-background-color, #111);
@@ -259,7 +274,9 @@ export class WetterDayDetail extends LitElement {
         display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch;
       }
       @media (min-width: 760px) {
-        :host { align-items: center; }
+        :host { align-items: center; padding: 24px; box-sizing: border-box; }
+        /* PC: Hintergrund deutlich abdunkeln und weichzeichnen, damit das Popup klar im Fokus steht */
+        .backdrop { background: rgba(0, 0, 0, 0.6); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
         .sheet { max-height: 90vh; border-radius: var(--ha-border-radius-lg, 12px); }
       }
       .top { display: flex; align-items: center; justify-content: space-between; }
@@ -294,9 +311,6 @@ export class WetterDayDetail extends LitElement {
       .big { font-size: 28px; font-weight: 600; }
       .dir { font-size: 18px; color: var(--wa-text2); font-weight: 500; }
       .sub { font-size: 13px; color: var(--wa-text2); }
-      .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12px; color: var(--wa-text2); margin-top: 8px; }
-      .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: -6px; }
-      .legend i.ln { height: 3px; }
       .dirs { position: relative; height: 36px; margin-top: 6px; }
       .dirs div {
         position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column;
