@@ -31,6 +31,12 @@
       </select>
     </div>
     <wetter-app id="app"></wetter-app>
+    <!-- ?kompakt → Dashboard-Karte statt App, in drei typischen Breiten -->
+    <div id="kompakt" style="display:none;gap:16px;flex-wrap:wrap;align-items:flex-start">
+      <wetter-app-kompakt style="width:360px"></wetter-app-kompakt>
+      <wetter-app-kompakt style="width:500px"></wetter-app-kompakt>
+      <wetter-app-kompakt style="width:300px"></wetter-app-kompakt>
+    </div>
   </div>
   <script src="audit.js"></script>
   <script type="module">
@@ -58,11 +64,18 @@
       },
     });
     app.hass = window.mockHass;
+    const kompakt = [...document.querySelectorAll("wetter-app-kompakt")];
+    if (location.search.includes("kompakt")) {
+      app.style.display = "none";
+      document.getElementById("kompakt").style.display = "flex";
+      kompakt.forEach((k) => { k.setConfig({ ...app._config, type: "custom:wetter-app-kompakt", navigation_path: "/dashboard/wetter-app" }); k.hass = window.mockHass; });
+    }
     // Zustandswechsel simulieren: neues hass-Objekt wie in HA
     function patch(id, state) {
       const h = window.mockHass;
       window.mockHass = { ...h, states: { ...h.states, [id]: { ...h.states[id], state } } };
       app.hass = window.mockHass;
+      kompakt.forEach((k) => k._config && (k.hass = window.mockHass));
     }
     document.querySelectorAll("input[name=sun]").forEach((r) => r.addEventListener("change", () => patch("sun.sun", r.value)));
     // Theme-Wechsel ohne Neuladen: Seitenfarben + hass.themes.darkMode wie in HA
@@ -72,6 +85,7 @@
       document.documentElement.classList.toggle("light", !dark);
       window.mockHass = { ...window.mockHass, themes: { ...window.mockHass.themes, darkMode: dark } };
       app.hass = window.mockHass;
+      kompakt.forEach((k) => k._config && (k.hass = window.mockHass));
       const u = new URL(location.href);
       u.search = u.search.replace(/[?&]light/, "").replace(/^&/, "?");
       if (!dark) u.search += (u.search ? "&" : "?") + "light";

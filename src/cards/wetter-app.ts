@@ -9,6 +9,7 @@ import { conditionLabel, tint } from "../util/conditions";
 import { hour, stateNum, temp, weekday } from "../util/format";
 import { weatherIcon } from "../util/icons";
 import { temperatureBlender } from "../util/blend";
+import { withMeasuredToday } from "../util/today";
 
 type Tab = "forecast" | "history";
 
@@ -149,25 +150,9 @@ export class WetterApp extends LitElement {
     );
   }
 
-  /**
-   * Tagesvorhersage, heute aber mindestens so tief/hoch wie heute schon gemessen
-   * (die Vorhersage für heute kennt die Nacht oft nicht mehr).
-   */
   private dailyForecast(nowTemp: number | undefined): ForecastItem[] | undefined {
-    const fc = this.daily.forecast;
-    const d0 = fc?.[0];
-    if (!d0) return fc;
-    const midnight = new Date().setHours(0, 0, 0, 0);
-    if (new Date(d0.datetime).setHours(0, 0, 0, 0) !== midnight) return fc;
     const id = this._config.sensors?.temperature;
-    const pts = (id && this._recent?.[id]) || [];
-    const seen = [nowTemp, ...pts.filter((p) => p.end > midnight).flatMap((p) => [p.min, p.max])]
-      .filter((v): v is number => typeof v === "number" && isFinite(v));
-    if (!seen.length) return fc;
-    const lo = Math.min(...seen, d0.templow ?? Infinity);
-    const hi = Math.max(...seen, d0.temperature ?? -Infinity);
-    if (lo === d0.templow && hi === d0.temperature) return fc;
-    return [{ ...d0, templow: lo, temperature: hi }, ...fc!.slice(1)];
+    return withMeasuredToday(this.daily.forecast, id ? this._recent?.[id] : undefined, nowTemp);
   }
 
   /** Ränder der Stundenleiste ausblenden, wo es noch weitergeht — zeigt, dass man wischen kann */
