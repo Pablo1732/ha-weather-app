@@ -80,7 +80,7 @@ export class WetterHistory extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    this._offTip = onOtherTip(this, () => (this._bft = undefined));
+    this._offTip = onOtherTip(this, () => (this._bft = undefined), () => this.renderRoot.querySelector(".bftbar"));
   }
 
   disconnectedCallback(): void {
@@ -351,7 +351,8 @@ export class WetterHistory extends LitElement {
     const t = this.rows(d.main, s.temperature, r);
     const rn = this.rows(d.rain, s.rain_total, r);
     const prevRain = d.prev && s.rain_total ? byMonth(this.shift(d.prev[s.rain_total] ?? [])) : [];
-    const months = [...Array(12)].map((_, m) => new Date(r.start.getFullYear(), m, 1).getTime());
+    // laufendes Jahr: nur bis zum aktuellen Monat, sonst stünden im Januar elf leere Zeilen
+    const months = [...Array(12)].map((_, m) => new Date(r.start.getFullYear(), m, 1).getTime()).filter((m) => m <= Date.now());
     const at = (rows: StatValue[], m: number) => rows.find((x) => x.start === m);
     const maxRain = Math.max(1, ...rn.map((x) => x.change ?? 0), ...prevRain.map((x) => x.change ?? 0));
     return html`<section class="card">${head("mdi:table", `Monate ${r.start.getFullYear()}`)}

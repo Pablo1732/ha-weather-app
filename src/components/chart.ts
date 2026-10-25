@@ -96,7 +96,7 @@ export class WetterChart extends LitElement {
       if (w && w !== this._w) this._w = w;
     });
     this._ro.observe(this);
-    this._offTip = onOtherTip(this, () => (this._hover = undefined));
+    this._offTip = onOtherTip(this, () => (this._hover = undefined), () => this);
     this.addEventListener("touchstart", this._onTouchStart, { passive: true });
     // nicht passiv, sonst lässt sich das Scrollen beim Werte-Ansehen nicht unterdrücken
     this.addEventListener("touchmove", this._onTouchMove, { passive: false });

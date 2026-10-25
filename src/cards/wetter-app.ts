@@ -276,7 +276,9 @@ export class WetterApp extends LitElement {
       .app {
         box-sizing: border-box; padding: 16px 12px; display: flex; flex-direction: column; gap: 12px;
         border-radius: var(--ha-card-border-radius, 12px);
-        background: linear-gradient(180deg, var(--wa-tint) 0, var(--wa-tint2, transparent) 520px), var(--primary-background-color, #111);
+        /* unten wieder in den reinen Theme-Hintergrund → keine Kante zum HA-Hintergrund darunter */
+        background: linear-gradient(180deg, var(--wa-tint) 0, var(--wa-tint2, transparent) 520px, var(--wa-tint2, transparent) calc(100% - 320px), transparent 100%),
+          var(--primary-background-color, #111);
       }
       .app { position: relative; --wa-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.08); /* Helles Theme: weiße Wolken/Flocken mit feiner Kante statt Grau — Grau verschwindet auf hellem Grund */
         --wa-drop: rgba(30, 60, 100, 0.45); --wa-flake: #fff; --wa-flake-edge: rgba(40, 55, 80, 0.35); --wa-cloudbg: rgba(255, 255, 255, 0.85); --wa-rays: 0.55;
