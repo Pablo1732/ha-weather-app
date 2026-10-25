@@ -6,10 +6,10 @@ import { repeat } from "lit/directives/repeat.js";
 // in manchen WebKit-Versionen (iOS-App) unzuverlässig. Nur Transform/Opacity → GPU, wenige Elemente.
 // Aus nur bei animations: false — „Bewegung reduzieren“ des Geräts wird bewusst ignoriert (reine Deko im Hintergrund).
 
-type Layer = "rain" | "pour" | "snow" | "sleet" | "sun" | "stars" | "fewstars" | "clouds" | "fewclouds" | "fog" | "flash" | "wind";
+type Layer = "hail" | "rain" | "pour" | "snow" | "sleet" | "sun" | "stars" | "fewstars" | "clouds" | "fewclouds" | "fog" | "flash" | "wind";
 
 const LAYERS: Record<string, Layer[]> = {
-  rainy: ["clouds", "rain"], pouring: ["clouds", "pour"], hail: ["clouds", "rain"],
+  rainy: ["clouds", "rain"], pouring: ["clouds", "pour"], hail: ["clouds", "hail"],
   "lightning-rainy": ["clouds", "rain", "flash"], lightning: ["clouds", "flash"],
   snowy: ["fewclouds", "snow"], "snowy-rainy": ["fewclouds", "sleet"],
   sunny: ["sun"], "clear-night": ["stars"],
@@ -40,6 +40,11 @@ const SNOW = (o: number): Keyframe[] => [
   { transform: "translate3d(0,-10px,0)", opacity: o }, { transform: "translate3d(14px,280px,0)", opacity: o * 0.8 },
   { transform: "translate3d(0,570px,0)", opacity: 0 },
 ];
+// Hagel: schneller, gerader Fall, Körner springen am Ende kurz zurück
+const HAILF = (o: number): Keyframe[] => [
+  { transform: "translate3d(0,-20px,0)", opacity: o, easing: "ease-in" }, { transform: "translate3d(0,300px,0)", opacity: o, offset: 0.62 },
+  { transform: "translate3d(4px,270px,0)", opacity: o * 0.7, offset: 0.72 }, { transform: "translate3d(7px,520px,0)", opacity: 0 },
+];
 // Bahn über die ganze Breite: Element sitzt am linken Rand der Bahn, Bahn wandert von links außen nach rechts außen
 const DRIFT = (w: number): Keyframe[] => [{ transform: `translate3d(-${w}%,0,0)` }, { transform: "translate3d(100%,0,0)" }];
 
@@ -54,6 +59,12 @@ function items(layer: Layer, seed: number): Item[] {
         return { cls: "drop", style: `left:${(r() * 100).toFixed(1)}%;height:${Math.round(14 + r() * 14)}px`, anim: FALL(0.4 + r() * 0.6), dur, delay: -r() * dur };
       }).concat(layer === "sleet" ? items("snow", seed + 7).slice(0, 18) : []);
     }
+    case "hail":
+      return n(26).map(() => {
+        const dur = 900 + r() * 500, size = (3.5 + r() * 2.5).toFixed(1);
+        // Körner landen in unterschiedlicher Höhe, sonst wirkt der Rücksprung wie eine Linie
+        return { cls: "hail", style: `left:${(r() * 100).toFixed(1)}%;top:${Math.round(-r() * 160)}px;width:${size}px;height:${size}px`, anim: HAILF(0.6 + r() * 0.4), dur, delay: -r() * dur };
+      }).concat(items("rain", seed + 3).slice(0, 10));
     case "snow":
       return n(36).map(() => {
         const dur = 9000 + r() * 8000, size = (2 + r() * 2.5).toFixed(1);
@@ -173,13 +184,14 @@ export class WetterSky extends LitElement {
     .g { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
     i { position: absolute; top: 0; left: 0; }
     .drop { width: 1.5px; border-radius: 1px; background: linear-gradient(180deg, transparent, var(--wa-drop)); }
-    .flake, .star { border-radius: 50%; background: var(--wa-flake); }
+    .flake, .star, .hail { border-radius: 50%; background: var(--wa-flake); box-shadow: 0 0 0 0.5px var(--wa-flake-edge, transparent); }
+    .hail { background: radial-gradient(circle at 35% 35%, #fff 0, var(--wa-flake) 70%); box-shadow: 0 0 0 0.5px var(--wa-flake-edge, rgba(0, 0, 0, 0.15)); }
     .glow {
       left: auto; right: -130px; top: -150px; width: 440px; height: 440px; border-radius: 50%;
       background: radial-gradient(circle, rgba(255, 236, 170, 0.6) 0, rgba(255, 222, 120, 0.42) 14%, rgba(255, 200, 80, 0.16) 36%, transparent 68%);
     }
     .rays {
-      left: auto; right: -330px; top: -350px; width: 820px; height: 820px; border-radius: 50%; opacity: 0.22;
+      left: auto; right: -330px; top: -350px; width: 820px; height: 820px; border-radius: 50%; opacity: var(--wa-rays, 0.22);
       background: repeating-conic-gradient(from 0deg, rgba(255, 220, 140, 0.16) 0deg, transparent 9deg, rgba(255, 220, 140, 0.16) 20deg);
       -webkit-mask-image: radial-gradient(circle, #000 0, rgba(0, 0, 0, 0.5) 20%, transparent 50%);
       mask-image: radial-gradient(circle, #000 0, rgba(0, 0, 0, 0.5) 20%, transparent 50%);

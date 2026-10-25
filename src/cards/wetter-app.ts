@@ -278,8 +278,9 @@ export class WetterApp extends LitElement {
         border-radius: var(--ha-card-border-radius, 12px);
         background: linear-gradient(180deg, var(--wa-tint) 0, var(--wa-tint2, transparent) 520px), var(--primary-background-color, #111);
       }
-      .app { position: relative; --wa-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.08); --wa-drop: rgba(40, 70, 110, 0.3); --wa-flake: rgba(90, 110, 140, 0.55); --wa-cloudbg: rgba(120, 135, 155, 0.15); }
-      .app.dark { --wa-card-shadow: none; --wa-drop: rgba(255, 255, 255, 0.3); --wa-flake: rgba(255, 255, 255, 0.75); --wa-cloudbg: rgba(255, 255, 255, 0.11); }
+      .app { position: relative; --wa-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.08); /* Helles Theme: weiße Wolken/Flocken mit feiner Kante statt Grau — Grau verschwindet auf hellem Grund */
+        --wa-drop: rgba(30, 60, 100, 0.45); --wa-flake: #fff; --wa-flake-edge: rgba(40, 55, 80, 0.35); --wa-cloudbg: rgba(255, 255, 255, 0.85); --wa-rays: 0.55; }
+      .app.dark { --wa-card-shadow: none; --wa-drop: rgba(255, 255, 255, 0.3); --wa-flake: rgba(255, 255, 255, 0.75); --wa-cloudbg: rgba(255, 255, 255, 0.11); --wa-flake-edge: transparent; --wa-rays: 0.22; }
       .app > header, .app > nav, .app > main { position: relative; z-index: 1; }
       .app > :not(.sky) { width: 100%; max-width: 1200px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
       /* Ganzseiten-Modus (Panel-Ansicht): ganze Fläche, keine Rundung */
