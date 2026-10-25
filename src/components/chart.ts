@@ -172,6 +172,14 @@ export class WetterChart extends LitElement {
       parts.push(svg`<line x1=${PAD.l} x2=${w - PAD.r} y1=${y} y2=${y} class="grid"/>`);
       parts.push(svg`<text x=${w - PAD.r + 6} y=${y + 4} class="ylab">${fmtTick(v)}${this.yUnit}</text>`);
     }
+    // rechte Skala (z. B. Summe/Wahrscheinlichkeit): Beschriftung links innen, in der Farbe der Serie
+    if (R) {
+      const col = this.series.find((s) => s.axis === "right")!.color;
+      for (const v of R.ticks) {
+        if (v === 0) continue;
+        parts.push(svg`<text x=${PAD.l + 3} y=${R.y(v) - 3} class="rlab" style="fill:${col}">${fmtTick(v)}${this.rightUnit}</text>`);
+      }
+    }
     for (const tk of this.ticks) {
       const x = this.x(tk.t);
       if (x < PAD.l - 1 || x > w - PAD.r + 1) continue;
@@ -278,6 +286,7 @@ export class WetterChart extends LitElement {
     .grid { stroke: var(--divider-color, rgba(127, 127, 127, 0.2)); stroke-width: 1; }
     .vgrid { stroke: var(--divider-color, rgba(127, 127, 127, 0.2)); stroke-dasharray: 2 3; }
     .ylab, .xlab { fill: var(--secondary-text-color); font-size: 11px; }
+    .rlab { font-size: 10px; opacity: 0.85; }
     .past { fill: rgba(127, 127, 127, 0.08); }
     .ln { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
     .mk { fill: var(--primary-text-color); stroke: var(--card-background-color, #000); stroke-width: 2; }

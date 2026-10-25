@@ -65,7 +65,8 @@ export class WetterHistory extends LitElement {
     return {
       main,
       rain: (r.preset === "day" ? "hour" : "day") as StatPeriod,
-      rose: (r.preset === "year" ? "day" : "hour") as StatPeriod,
+      // Rose immer aus Stundenwerten — Tagesmittel verwischen die Richtung (Jahr ≈ 8 760 Werte, einmalig gecacht)
+      rose: "hour" as StatPeriod,
     };
   }
 
@@ -255,7 +256,8 @@ export class WetterHistory extends LitElement {
     const rows = this.rows(d.rain, s.rain_total, r);
     const cumul = (list: StatValue[]) => {
       let acc = 0;
-      return list.map((x) => ({ t: x.end, v: (acc += x.change ?? 0) }));
+      // laufender Abschnitt endet in der Zukunft → Punkt aufs Zeitraum-Ende begrenzen
+      return list.map((x) => ({ t: Math.min(x.end, r.end.getTime()), v: (acc += x.change ?? 0) }));
     };
     const series: ChartSeries[] = [
       { type: "bar", points: rows.map((x) => ({ t: x.start, t2: x.end, v: x.change ?? 0 })), color: "var(--wa-rain)", label: "", unit: " l/m²", digits: 1 },
