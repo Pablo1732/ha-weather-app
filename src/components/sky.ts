@@ -4,7 +4,7 @@ import { repeat } from "lit/directives/repeat.js";
 // Dezente Wetter-Animation im Hintergrund (Regen, Schnee, Sonne, Sterne, Wolken, Nebel, Blitz, Wind).
 // Läuft über die Web Animations API statt CSS-@keyframes: die sind in Shadow-DOM-Stylesheets
 // in manchen WebKit-Versionen (iOS-App) unzuverlässig. Nur Transform/Opacity → GPU, wenige Elemente.
-// Aus bei animations: false oder „Bewegung reduzieren“.
+// Aus nur bei animations: false — „Bewegung reduzieren“ des Geräts wird bewusst ignoriert (reine Deko im Hintergrund).
 
 type Layer = "rain" | "pour" | "snow" | "sleet" | "sun" | "stars" | "fewstars" | "clouds" | "fewclouds" | "fog" | "flash" | "wind";
 
@@ -29,9 +29,16 @@ function rng(seed: number) {
 
 interface Item { cls: string; style: string; anim: Keyframe[]; dur: number; delay: number; easing?: string; dir?: PlaybackDirection }
 
-const FALL: Keyframe[] = [{ transform: "translate3d(0,-40px,0)" }, { transform: "translate3d(0,580px,0)" }];
-const SNOW: Keyframe[] = [
-  { transform: "translate3d(0,-10px,0)" }, { transform: "translate3d(14px,280px,0)" }, { transform: "translate3d(0,570px,0)" },
+// Ausblenden nach unten direkt in der Animation statt per mask-image am Container:
+// Safari zeichnet animierte Kinder unter einer Maske teils gar nicht.
+// o = Grunddeckkraft des einzelnen Tropfens/der Flocke (die Animation überschreibt sonst die Inline-Opacity)
+const FALL = (o: number): Keyframe[] => [
+  { transform: "translate3d(0,-40px,0)", opacity: o }, { transform: "translate3d(0,230px,0)", opacity: o, offset: 0.43 },
+  { transform: "translate3d(0,580px,0)", opacity: 0 },
+];
+const SNOW = (o: number): Keyframe[] => [
+  { transform: "translate3d(0,-10px,0)", opacity: o }, { transform: "translate3d(14px,280px,0)", opacity: o * 0.8 },
+  { transform: "translate3d(0,570px,0)", opacity: 0 },
 ];
 // Bahn über die ganze Breite: Element sitzt am linken Rand der Bahn, Bahn wandert von links außen nach rechts außen
 const DRIFT = (w: number): Keyframe[] => [{ transform: `translate3d(-${w}%,0,0)` }, { transform: "translate3d(100%,0,0)" }];
@@ -44,13 +51,13 @@ function items(layer: Layer, seed: number): Item[] {
       const count = layer === "pour" ? 56 : layer === "sleet" ? 14 : 28;
       return n(count).map(() => {
         const dur = 700 + r() * 500;
-        return { cls: "drop", style: `left:${(r() * 100).toFixed(1)}%;height:${Math.round(14 + r() * 14)}px;opacity:${(0.4 + r() * 0.6).toFixed(2)}`, anim: FALL, dur, delay: -r() * dur };
+        return { cls: "drop", style: `left:${(r() * 100).toFixed(1)}%;height:${Math.round(14 + r() * 14)}px`, anim: FALL(0.4 + r() * 0.6), dur, delay: -r() * dur };
       }).concat(layer === "sleet" ? items("snow", seed + 7).slice(0, 18) : []);
     }
     case "snow":
       return n(36).map(() => {
         const dur = 9000 + r() * 8000, size = (2 + r() * 2.5).toFixed(1);
-        return { cls: "flake", style: `left:${(r() * 100).toFixed(1)}%;width:${size}px;height:${size}px;opacity:${(0.35 + r() * 0.5).toFixed(2)}`, anim: SNOW, dur, delay: -r() * dur };
+        return { cls: "flake", style: `left:${(r() * 100).toFixed(1)}%;width:${size}px;height:${size}px`, anim: SNOW(0.35 + r() * 0.5), dur, delay: -r() * dur };
       });
     case "stars": case "fewstars":
       return n(layer === "stars" ? 46 : 18).map(() => {
@@ -105,7 +112,6 @@ function itemsFor(condition: string, night: boolean): Item[] {
   return list;
 }
 
-const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 interface Group { key: string; items: Item[]; leaving?: boolean }
 const FADE = 1500;
@@ -120,7 +126,7 @@ export class WetterSky extends LitElement {
 
   protected willUpdate(changed: PropertyValues): void {
     if (!changed.has("condition") && !changed.has("night")) return;
-    const key = this.condition && !reducedMotion() ? `${this.condition}|${this.night}` : "";
+    const key = this.condition ? `${this.condition}|${this.night}` : "";
     const cur = this._groups.find((g) => !g.leaving);
     if (cur?.key === key) return;
     this._groups = [
@@ -163,14 +169,11 @@ export class WetterSky extends LitElement {
   static styles = css`
     :host {
       position: absolute; left: 0; right: 0; top: 0; height: 560px; overflow: hidden; pointer-events: none; display: block;
-      -webkit-mask-image: linear-gradient(180deg, #000 0, #000 45%, transparent 100%);
-      mask-image: linear-gradient(180deg, #000 0, #000 45%, transparent 100%);
     }
-    .g { position: absolute; inset: 0; }
-    i { position: absolute; top: 0; left: 0; will-change: transform; }
+    .g { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+    i { position: absolute; top: 0; left: 0; }
     .drop { width: 1.5px; border-radius: 1px; background: linear-gradient(180deg, transparent, var(--wa-drop)); }
     .flake, .star { border-radius: 50%; background: var(--wa-flake); }
-    .star { will-change: opacity; }
     .glow {
       left: auto; right: -130px; top: -150px; width: 440px; height: 440px; border-radius: 50%;
       background: radial-gradient(circle, rgba(255, 236, 170, 0.6) 0, rgba(255, 222, 120, 0.42) 14%, rgba(255, 200, 80, 0.16) 36%, transparent 68%);
