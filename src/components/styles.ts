@@ -30,7 +30,7 @@ export const cardStyles = css`
     background: var(--ha-card-background, var(--card-background-color, #fff));
     border-radius: var(--ha-card-border-radius, 12px);
     border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, var(--wa-divider));
-    box-shadow: var(--ha-card-box-shadow, none);
+    box-shadow: var(--ha-card-box-shadow, var(--wa-card-shadow, none));
     padding: 12px 14px;
     min-width: 0;
     box-sizing: border-box;

@@ -93,7 +93,7 @@ export class WetterApp extends LitElement {
     }
     Object.assign(el, {
       hass: this.hass, config: this._config, hourly: this.hourly.forecast ?? [],
-      daily: this.daily.forecast, index: this._detail, metric: this._metric,
+      daily: this.dailyForecast(stateNum(this.hass, this._config.sensors?.temperature) ?? this.hass?.states[this._config.weather]?.attributes.temperature), index: this._detail, metric: this._metric,
     });
     el.classList.toggle("dark", !!this.hass?.themes?.darkMode);
   }
@@ -119,18 +119,39 @@ export class WetterApp extends LitElement {
   /** Letzte 24 h stündlich: Regen gemessen + Luftdruck-Tendenz für die Kacheln. */
   private loadRecent(): void {
     const s = this._config.sensors ?? {};
-    const ids = [s.rain_total, s.pressure].filter(Boolean) as string[];
+    const ids = [s.rain_total, s.pressure, s.temperature].filter(Boolean) as string[];
     if (!this.hass || !ids.length) return;
     const end = Math.ceil(Date.now() / 300_000) * 300_000;
     const key = String(end);
     if (key === this._recentKey) return;
     this._recentKey = key;
     fetchStatistics(this.hass, {
-      ids, start: new Date(end - 86_400_000), end: new Date(end), period: "hour", types: ["mean", "change"],
+      ids, start: new Date(end - 86_400_000), end: new Date(end), period: "hour", types: ["mean", "min", "max", "change"],
     }).then(
       (r) => key === this._recentKey && (this._recent = r),
       () => (this._recentKey = undefined),
     );
+  }
+
+  /**
+   * Tagesvorhersage, heute aber mindestens so tief/hoch wie heute schon gemessen
+   * (die Vorhersage für heute kennt die Nacht oft nicht mehr).
+   */
+  private dailyForecast(nowTemp: number | undefined): ForecastItem[] | undefined {
+    const fc = this.daily.forecast;
+    const d0 = fc?.[0];
+    if (!d0) return fc;
+    const midnight = new Date().setHours(0, 0, 0, 0);
+    if (new Date(d0.datetime).setHours(0, 0, 0, 0) !== midnight) return fc;
+    const id = this._config.sensors?.temperature;
+    const pts = (id && this._recent?.[id]) || [];
+    const seen = [nowTemp, ...pts.filter((p) => p.end > midnight).flatMap((p) => [p.min, p.max])]
+      .filter((v): v is number => typeof v === "number" && isFinite(v));
+    if (!seen.length) return fc;
+    const lo = Math.min(...seen, d0.templow ?? Infinity);
+    const hi = Math.max(...seen, d0.temperature ?? -Infinity);
+    if (lo === d0.templow && hi === d0.temperature) return fc;
+    return [{ ...d0, templow: lo, temperature: hi }, ...fc!.slice(1)];
   }
 
   private openDetail(index: number, metric: Metric = this._metric): void {
@@ -146,11 +167,13 @@ export class WetterApp extends LitElement {
     const night = this._config.sun ? this.hass.states[this._config.sun]?.state === "below_horizon" : false;
     const s = this._config.sensors ?? {};
     const nowTemp = stateNum(this.hass, s.temperature) ?? w.attributes.temperature;
-    const today = this.daily.forecast?.[0];
+    const daily = this.dailyForecast(nowTemp);
+    const today = daily?.[0];
+    const dark = !!this.hass.themes?.darkMode;
 
     return html`
-      <div class="app ${this._wide ? "wide" : ""} ${this.hass.themes?.darkMode ? "dark" : ""} ${this._config.layout === "page" ? "page" : ""}"
-        style="--wa-tint:${tint(w.state, night)}">
+      <div class="app ${this._wide ? "wide" : ""} ${dark ? "dark" : ""} ${this._config.layout === "page" ? "page" : ""}"
+        style="--wa-tint:${dark ? tint(w.state, night) : tint(w.state, night, 0.62)};--wa-tint2:${dark ? "transparent" : tint(w.state, night, 0.1)}">
         ${this._config.animations !== false ? html`<wetter-app-sky class="sky" .condition=${w.state} .night=${night}></wetter-app-sky>` : nothing}
         <header>
           ${this._config.name ? html`<div class="place">${this._config.name}</div>` : nothing}
@@ -168,12 +191,12 @@ export class WetterApp extends LitElement {
             </button>`)}
         </nav>
 
-        <main>${this._tab === "forecast" ? this.renderForecast(nowTemp, night) : html`<wetter-app-history .hass=${this.hass} .config=${this._config} .wide=${this._wide}></wetter-app-history>`}</main>
+        <main>${this._tab === "forecast" ? this.renderForecast(daily, nowTemp, night) : html`<wetter-app-history .hass=${this.hass} .config=${this._config} .wide=${this._wide}></wetter-app-history>`}</main>
       </div>
     `;
   }
 
-  private renderForecast(nowTemp: number | undefined, night: boolean) {
+  private renderForecast(daily: ForecastItem[] | undefined, nowTemp: number | undefined, night: boolean) {
     const err = this.hourly.error ?? this.daily.error;
     return html`
       ${err ? html`<div class="warn">Vorhersage nicht verfügbar: ${err}</div>` : nothing}
@@ -182,7 +205,7 @@ export class WetterApp extends LitElement {
           <section class="card hourly">${this.renderHourly(nowTemp, night)}</section>
           ${renderTiles({ hass: this.hass!, config: this._config, hourly: this.hourly.forecast, recent: this._recent })}
         </div>
-        <section class="card daily">${this.renderDaily(nowTemp)}</section>
+        <section class="card daily">${this.renderDaily(daily, nowTemp)}</section>
       </div>
     `;
   }
@@ -207,8 +230,7 @@ export class WetterApp extends LitElement {
     `;
   }
 
-  private renderDaily(nowTemp: number | undefined) {
-    const fc = this.daily.forecast;
+  private renderDaily(fc: ForecastItem[] | undefined, nowTemp: number | undefined) {
     if (!fc) return html`<div class="loading">Lade Tagesvorhersage …</div>`;
     const days = fc.slice(0, 10);
     const lo = Math.min(...days.map((d) => d.templow ?? d.temperature ?? 99));
@@ -253,10 +275,10 @@ export class WetterApp extends LitElement {
       .app {
         box-sizing: border-box; padding: 16px 12px; display: flex; flex-direction: column; gap: 12px;
         border-radius: var(--ha-card-border-radius, 12px);
-        background: linear-gradient(180deg, var(--wa-tint) 0, transparent 520px), var(--primary-background-color, #111);
+        background: linear-gradient(180deg, var(--wa-tint) 0, var(--wa-tint2, transparent) 520px), var(--primary-background-color, #111);
       }
-      .app { position: relative; --wa-drop: rgba(40, 70, 110, 0.3); --wa-flake: rgba(90, 110, 140, 0.55); --wa-cloudbg: rgba(120, 135, 155, 0.15); }
-      .app.dark { --wa-drop: rgba(255, 255, 255, 0.3); --wa-flake: rgba(255, 255, 255, 0.75); --wa-cloudbg: rgba(255, 255, 255, 0.11); }
+      .app { position: relative; --wa-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.08); --wa-drop: rgba(40, 70, 110, 0.3); --wa-flake: rgba(90, 110, 140, 0.55); --wa-cloudbg: rgba(120, 135, 155, 0.15); }
+      .app.dark { --wa-card-shadow: none; --wa-drop: rgba(255, 255, 255, 0.3); --wa-flake: rgba(255, 255, 255, 0.75); --wa-cloudbg: rgba(255, 255, 255, 0.11); }
       .app > header, .app > nav, .app > main { position: relative; z-index: 1; }
       .app > :not(.sky) { width: 100%; max-width: 1200px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
       /* Ganzseiten-Modus (Panel-Ansicht): ganze Fläche, keine Rundung */

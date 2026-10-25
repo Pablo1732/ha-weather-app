@@ -25,16 +25,17 @@ export function conditionLabel(c: string | undefined): string {
 // Farbton (RGB) je Wetterlage — nur halbtransparent über dem Theme-Hintergrund, daher dezent
 const TINT_DAY: Record<string, string> = {
   sunny: "47,128,237", partlycloudy: "70,130,200", cloudy: "120,135,150", "windy-variant": "120,135,150",
-  rainy: "80,105,135", pouring: "70,90,120", hail: "90,100,125", snowy: "160,180,205", "snowy-rainy": "130,150,175",
+  rainy: "75,110,155", pouring: "65,95,140", hail: "90,100,125", snowy: "160,180,205", "snowy-rainy": "130,150,175",
   fog: "150,155,160", lightning: "85,80,125", "lightning-rainy": "85,80,125", exceptional: "150,70,70", windy: "100,140,170",
 };
 const TINT_NIGHT = "35,50,100";
 
-export function tint(c: string | undefined, night: boolean): string {
+/** a = Deckkraft; ohne Angabe Standard für den oberen Verlauf */
+export function tint(c: string | undefined, night: boolean, a = night ? 0.35 : 0.45): string {
   const rgb = night && (c === "sunny" || c === "clear-night" || c === "partlycloudy")
     ? TINT_NIGHT
     : (c && TINT_DAY[c]) || TINT_DAY.cloudy;
-  return `rgba(${rgb},${night ? 0.35 : 0.45})`;
+  return `rgba(${rgb},${a})`;
 }
 
 const MOON: Record<string, string> = {
