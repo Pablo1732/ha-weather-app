@@ -57,12 +57,12 @@ export const cardStyles = css`
   .loading, .hint { color: var(--wa-text2); text-align: center; padding: 16px; font-size: 14px; }
 `;
 
-export interface LegendItem { label: string; color?: string; kind?: "box" | "line" | "dash"; opacity?: number }
+export interface LegendItem { label: string; color?: string; kind?: "box" | "line"; opacity?: number }
 
 /** Legende unter Diagrammen; Farbmarke und Text bleiben beim Umbrechen zusammen. */
 export function legend(items: (LegendItem | false | undefined)[]) {
   return html`<div class="legend">${(items.filter(Boolean) as LegendItem[]).map((it) => html`<span><i class=${it.kind ?? "box"}
-    style="background:${it.kind === "dash" ? "none" : it.color};opacity:${it.opacity ?? 1}"></i>${it.label}</span>`)}</div>`;
+    style="background:${it.color};opacity:${it.opacity ?? 1}"></i>${it.label}</span>`)}</div>`;
 }
 
 export const legendStyles = css`
@@ -70,5 +70,4 @@ export const legendStyles = css`
   .legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: none; }
   .legend i.line { height: 3px; }
-  .legend i.dash { height: 0; border-top: 2px dashed var(--wa-text2); }
 `;

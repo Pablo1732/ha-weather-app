@@ -20,8 +20,6 @@ export interface ChartSeries {
   points: ChartPoint[];
   color: string;
   axis?: "left" | "right";
-  /** ganze Linie gestrichelt (z. B. Vorjahr) */
-  dashed?: boolean;
   /** Linie vor diesem Zeitpunkt gestrichelt (Vergangenheit vs. Vorhersage) */
   dashUntil?: number;
   /** Balkenbreite in ms (Standard: Abstand der Punkte) */
@@ -302,7 +300,7 @@ export class WetterChart extends LitElement {
         parts.push(svg`<path d=${smooth(a)} class="ln" style="stroke:${s.color}" stroke-dasharray="5 5"/>`);
         if (b.length > 1) parts.push(svg`<path d=${smooth(b)} class="ln" style="stroke:${s.color}"/>`);
       } else {
-        parts.push(svg`<path d=${smooth(xy)} class="ln" style="stroke:${s.color}" stroke-dasharray=${s.dashed ? "4 4" : "none"}/>`);
+        parts.push(svg`<path d=${smooth(xy)} class="ln" style="stroke:${s.color}" />`);
       }
     });
 

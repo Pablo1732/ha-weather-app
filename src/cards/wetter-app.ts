@@ -155,6 +155,13 @@ export class WetterApp extends LitElement {
     return [{ ...d0, templow: lo, temperature: hi }, ...fc!.slice(1)];
   }
 
+  /** Index des Tages in der Tagesvorhersage, zu dem dieser Zeitpunkt gehört (Stunde → richtiger Tag im Detail) */
+  private dayIndex(datetime: string): number {
+    const day = new Date(datetime).setHours(0, 0, 0, 0);
+    const i = (this.daily.forecast ?? []).findIndex((d) => new Date(d.datetime).setHours(0, 0, 0, 0) === day);
+    return Math.max(0, i);
+  }
+
   private openDetail(index: number, metric: Metric = this._metric): void {
     this._metric = metric;
     this._detail = index;
@@ -221,7 +228,7 @@ export class WetterApp extends LitElement {
       ${head("mdi:clock-outline", "Stündlich")}
       <div class="hours">
         ${items.map((f, i) => html`
-          <div class="hr" @click=${() => this.openDetail(0, "temp")}>
+          <div class="hr" @click=${() => this.openDetail(this.dayIndex(f.datetime), "temp")}>
             <div class="t">${i === 0 ? "Jetzt" : hour(new Date(f.datetime))}</div>
             ${weatherIcon(f.condition, i === 0 ? night : f.is_daytime === false)}
             <div class="p">${(f.precipitation_probability ?? 0) >= 20 ? `${Math.round(f.precipitation_probability!)} %` : ""}</div>

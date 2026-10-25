@@ -31,7 +31,6 @@ interface Data {
   main: StatResult; // Temperatur, Wind, Druck, Feuchte, Sonne, UV (mean/min/max)
   rain: StatResult; // Regen-Änderung
   dir: StatResult; // Windrichtung (+ ggf. eigene Windgeschwindigkeit für die Rose)
-  prev?: StatResult; // Vorjahr: Temperatur + Regen
 }
 
 export class WetterHistory extends LitElement {
@@ -41,7 +40,6 @@ export class WetterHistory extends LitElement {
     wide: { type: Boolean, reflect: true },
     _data: { state: true },
     _err: { state: true },
-    _compare: { state: true },
     _extra: { state: true },
     _bft: { state: true },
   };
@@ -53,7 +51,6 @@ export class WetterHistory extends LitElement {
   private _err?: string;
   private _key?: string;
   private _dataRange?: TimeRange; // Zeitraum, zu dem _data gehört (beim Blättern bis zum Laden der alte)
-  private _compare = false;
   private _extra: Extra = "pressure";
   private _bft?: number; // in der Windrose angetippte Beaufort-Stufe
   private _bftUp = false; // Detail nach oben öffnen (unten kein Platz)
@@ -97,26 +94,22 @@ export class WetterHistory extends LitElement {
     const r = this.range.range;
     const s = this.config.sensors ?? {};
     const p = this.periods(r);
-    const key = `${r.start.getTime()}|${r.end.getTime()}|${this._compare}`;
+    const key = `${r.start.getTime()}|${r.end.getTime()}`;
     if (key === this._key) return;
     this._key = key;
     this._err = undefined;
     const ids = (xs: (string | undefined)[]) => xs.filter(Boolean) as string[];
-    const q = (idList: string[], period: StatPeriod, types: any[], start = r.start, end = r.end) =>
-      fetchStatistics(this.hass!, { ids: idList, start, end, period, types });
+    const q = (idList: string[], period: StatPeriod, types: any[]) =>
+      fetchStatistics(this.hass!, { ids: idList, start: r.start, end: r.end, period, types });
     try {
-      const prevStart = new Date(r.start); prevStart.setFullYear(prevStart.getFullYear() - 1);
-      const prevEnd = new Date(r.end); prevEnd.setFullYear(prevEnd.getFullYear() - 1);
-      const [main, rainRes, dir, prevT, prevR] = await Promise.all([
+      const [main, rainRes, dir] = await Promise.all([
         q(ids([s.temperature, s.humidity, s.pressure, s.solar, s.uv, s.wind_speed, s.wind_gust]), p.main, ["mean", "min", "max"]),
         q(ids([s.rain_total]), p.rain, ["change"]),
         q(ids([s.wind_direction, p.rose !== p.main ? s.wind_speed : undefined]), p.rose, ["mean", "min", "max"]),
-        this._compare ? q(ids([s.temperature]), p.main, ["mean", "min", "max"], prevStart, prevEnd) : undefined,
-        this._compare ? q(ids([s.rain_total]), p.rain, ["change"], prevStart, prevEnd) : undefined,
       ]);
       if (key !== this._key) return;
       this._dataRange = r;
-      this._data = { main, rain: rainRes, dir, prev: this._compare ? { ...prevT, ...prevR } : undefined };
+      this._data = { main, rain: rainRes, dir };
     } catch (err: any) {
       if (key !== this._key) return;
       this._err = err?.message ?? String(err);
@@ -132,7 +125,6 @@ export class WetterHistory extends LitElement {
     const r = d && this._dataRange ? this._dataRange : sel;
     const stale = r !== sel && (r.start.getTime() !== sel.start.getTime() || r.end.getTime() !== sel.end.getTime());
     const s = this.config.sensors ?? {};
-    const canCompare = sel.preset !== "day";
     const tempRows = (s.temperature && d?.main[s.temperature]) || [];
     const first = tempRows.find((x) => x.mean != null)?.start;
     const gapHint = !stale && first != null && first - r.start.getTime() > 2 * DAY
@@ -142,8 +134,6 @@ export class WetterHistory extends LitElement {
     return html`
       <section class="card">
         ${renderRangeSelector(this.range)}
-        ${canCompare ? html`<div class="cmp"><button class=${this._compare ? "on" : ""}
-          @click=${() => (this._compare = !this._compare)}><ha-icon icon="mdi:compare-horizontal"></ha-icon>Vorjahr vergleichen</button></div>` : nothing}
       </section>
       ${this._err ? html`<div class="warn">Statistik nicht verfügbar: ${this._err}</div>` : nothing}
       ${!d ? html`<div class="loading">Lade Historie …</div>`
@@ -204,14 +194,6 @@ export class WetterHistory extends LitElement {
       .rightMax=${opts.rightMax} .timeFormat=${this.fmt(r, r.preset === "year" ? "month" : opts.period)}></wetter-app-chart>`;
   }
 
-  /** Vorjahres-Punkte um ein Jahr nach vorn schieben, damit sie über dem aktuellen Zeitraum liegen */
-  private shift(rows: StatValue[]): StatValue[] {
-    return rows.map((x) => {
-      const a = new Date(x.start); a.setFullYear(a.getFullYear() + 1);
-      const b = new Date(x.end); b.setFullYear(b.getFullYear() + 1);
-      return { ...x, start: a.getTime(), end: b.getTime() };
-    });
-  }
 
   // ---------- Bausteine ----------
 
@@ -260,13 +242,9 @@ export class WetterHistory extends LitElement {
       series.push({ type: "range", points: rows.map((x) => ({ t: x.start, t2: x.end, v: x.min, v2: x.max })), color: "rgba(79, 195, 247, 0.55)", label: "", unit: "°", digits: 1 });
     }
     series.push({ type: "line", points: rows.map((x) => ({ t: center(x), v: x.mean })), color: "var(--wa-temp-line, #ffb74d)", label: "Ø", unit: "°", digits: 1 });
-    if (d.prev && s.temperature) {
-      const prev = this.rows({ x: this.shift(d.prev[s.temperature] ?? []) }, "x", r);
-      series.push({ type: "line", dashed: true, points: prev.map((x) => ({ t: center(x), v: x.mean })), color: "var(--wa-text2)", label: "Vorjahr Ø", unit: "°", digits: 1 });
-    }
     return html`<section class="card">${head("mdi:thermometer", "Temperatur")}
       ${this.chart(r, series, { yUnit: "°", period: p.main })}
-      ${legend([{ color: "#4fc3f7", label: "Min–Max" }, { color: "#ffb74d", label: "Durchschnitt", kind: "line" }, !!d.prev && { label: "Vorjahr", kind: "dash" }])}
+      ${legend([{ color: "#4fc3f7", label: "Min–Max" }, { color: "#ffb74d", label: "Durchschnitt", kind: "line" }])}
     </section>`;
   }
 
@@ -284,16 +262,11 @@ export class WetterHistory extends LitElement {
       { type: "bar", points: rows.map((x) => ({ t: x.start, t2: x.end, v: x.change ?? 0 })), color: "var(--wa-rain)", label: "Menge", unit: " l/m²", digits: 1 },
       { type: "line", axis: "right", points: [{ t: r.start.getTime(), v: 0 }, ...cumul(rows)], color: "var(--wa-prob, #90caf9)", label: "Summe", unit: " l/m²", digits: 1 },
     ];
-    if (d.prev) {
-      const prev = this.rows({ x: this.shift(d.prev[s.rain_total] ?? []) }, "x", r);
-      if (prev.length) series.push({ type: "line", axis: "right", dashed: true, points: [{ t: r.start.getTime(), v: 0 }, ...cumul(prev)], color: "var(--wa-text2)", label: "Vorjahr", unit: " l/m²", digits: 1 });
-    }
     return html`<section class="card">${head("mdi:weather-pouring", "Niederschlag")}
       ${this.chart(r, series, { yMin: 0, period: p.rain })}
       ${legend([
         { color: "var(--wa-rain)", label: p.rain === "hour" ? "pro Stunde" : r.preset === "year" ? "pro Monat" : "pro Tag" },
         { color: "var(--wa-prob, #90caf9)", label: "Summe (blaue Skala links)", kind: "line" },
-        !!d.prev && { label: "Vorjahr", kind: "dash" },
       ])}
     </section>`;
   }
@@ -350,21 +323,19 @@ export class WetterHistory extends LitElement {
     const s = this.config.sensors ?? {};
     const t = this.rows(d.main, s.temperature, r);
     const rn = this.rows(d.rain, s.rain_total, r);
-    const prevRain = d.prev && s.rain_total ? byMonth(this.shift(d.prev[s.rain_total] ?? [])) : [];
     // laufendes Jahr: nur bis zum aktuellen Monat, sonst stünden im Januar elf leere Zeilen
     const months = [...Array(12)].map((_, m) => new Date(r.start.getFullYear(), m, 1).getTime()).filter((m) => m <= Date.now());
     const at = (rows: StatValue[], m: number) => rows.find((x) => x.start === m);
-    const maxRain = Math.max(1, ...rn.map((x) => x.change ?? 0), ...prevRain.map((x) => x.change ?? 0));
+    const maxRain = Math.max(1, ...rn.map((x) => x.change ?? 0));
     return html`<section class="card">${head("mdi:table", `Monate ${r.start.getFullYear()}`)}
       <table class="months">
         <thead><tr><th></th><th>Ø</th><th>Min</th><th>Max</th><th class="rc">Niederschlag</th></tr></thead>
         <tbody>${months.map((m, i) => {
-          const tm = at(t, m), rm = at(rn, m), pm = at(prevRain, m);
+          const tm = at(t, m), rm = at(rn, m);
           if (!tm && !rm) return html`<tr class="empty"><td>${MONTHS[i]}</td><td colspan="4">–</td></tr>`;
           return html`<tr>
             <td>${MONTHS[i]}</td><td>${temp(tm?.mean, 1)}</td><td class="cold">${temp(tm?.min, 1)}</td><td class="warm">${temp(tm?.max, 1)}</td>
-            <td class="rc"><div class="rcell"><div class="rbar"><i style="width:${((rm?.change ?? 0) / maxRain) * 100}%"></i>
-              ${pm ? html`<b style="left:${((pm.change ?? 0) / maxRain) * 100}%" title="Vorjahr"></b>` : nothing}</div>
+            <td class="rc"><div class="rcell"><div class="rbar"><i style="width:${((rm?.change ?? 0) / maxRain) * 100}%"></i></div>
               <span>${num(rm?.change, 0)}</span></div></td></tr>`;
         })}</tbody>
       </table>
@@ -389,13 +360,11 @@ export class WetterHistory extends LitElement {
       .ext { display: flex; align-items: baseline; gap: 6px; font-size: 14px; flex-wrap: wrap; }
       .ext span { font-weight: 500; }
       .ext small { color: var(--wa-text2); font-size: 12px; }
-      .cmp { display: flex; justify-content: center; margin-top: 8px; }
-      .cmp button, .chips.small button {
+      .chips.small button {
         display: flex; align-items: center; gap: 6px; border: 1px solid var(--wa-divider); background: none;
         color: var(--wa-text); font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 16px; cursor: pointer;
       }
-      .cmp ha-icon { --mdc-icon-size: 16px; }
-      .cmp button.on, .chips.small button.on {
+      .chips.small button.on {
         border-color: transparent; color: var(--wa-accent); font-weight: 500; background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.18);
       }
       /* oben so viel Luft wie unten bis zum Diagramm (dessen Innenabstand oben) */
@@ -415,7 +384,6 @@ export class WetterHistory extends LitElement {
       .months tr.empty td { color: var(--wa-text2); }
       .rbar { position: relative; flex: 1; height: 8px; background: var(--wa-track); border-radius: 4px; }
       .rbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--wa-rain); border-radius: 4px; }
-      .rbar b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--wa-text2); }
       .rcell span { min-width: 30px; }
     `,
   ];
