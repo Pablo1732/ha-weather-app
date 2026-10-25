@@ -185,6 +185,12 @@ export class WetterDayDetail extends LitElement {
     return this._past?.[id] ?? [];
   }
 
+  /** Querformat mit wenig Höhe (Echo Show): Diagramm füllt den Platz rechts statt fester 220 px */
+  private chartHeight(): number {
+    const short = typeof matchMedia === "function" && matchMedia("(max-height: 600px) and (min-width: 700px)").matches;
+    return short ? Math.max(180, Math.min(360, window.innerHeight - 215)) : 220;
+  }
+
   private renderChart(start: number, end: number, hours: ForecastItem[], now?: number) {
     const s = this.config.sensors ?? {};
     const fc = hours.map((h) => ({ t: new Date(h.datetime).getTime(), h }));
@@ -232,7 +238,7 @@ export class WetterDayDetail extends LitElement {
 
     return html`
       <wetter-app-chart .start=${start} .end=${end} .series=${series} .ticks=${ticks} .markers=${markers}
-        .now=${now} .height=${220} .yUnit=${yUnit} .yMin=${yMin} .rightMax=${rightMax} .rightUnit=${rightUnit}
+        .now=${now} .height=${this.chartHeight()} .yUnit=${yUnit} .yMin=${yMin} .rightMax=${rightMax} .rightUnit=${rightUnit}
         .timeFormat=${(t: number) => new Date(t).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}>
       </wetter-app-chart>
       ${this.metric === "wind" ? this.renderWindDirs(start, future) : nothing}
@@ -278,8 +284,6 @@ export class WetterDayDetail extends LitElement {
         /* PC: Hintergrund deutlich abdunkeln und weichzeichnen, damit das Popup klar im Fokus steht */
         .backdrop { background: rgba(0, 0, 0, 0.6); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
         .sheet { max-height: 90vh; border-radius: var(--ha-border-radius-lg, 12px); }
-        /* niedrige Bildschirme (Echo Show 960×480): fast volle Höhe nutzen */
-        @media (max-height: 600px) { :host { padding: 8px 24px; } .sheet { max-height: 100%; } }
       }
       .top { display: flex; align-items: center; justify-content: space-between; }
       .ttl { font-size: 18px; font-weight: 500; }
@@ -319,6 +323,28 @@ export class WetterDayDetail extends LitElement {
         align-items: center; font-size: 11px; color: var(--wa-text2); white-space: nowrap;
       }
       .dirs ha-icon { --mdc-icon-size: 18px; color: var(--wa-text); }
+      /* am Ende, damit es die Grundregeln oben überschreibt.
+         Breit, aber niedrig (Echo Show 960×480, Handy quer): Vollbild, Tage + Werte-Auswahl links als Spalte,
+         rechts Datum und Diagramm — nichts muss vertikal gescrollt werden */
+      @media (max-height: 600px) and (min-width: 700px) {
+        :host { padding: 0; align-items: stretch; }
+        .sheet {
+          max-width: none; max-height: none; height: 100%; border-radius: 0;
+          display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto auto auto 1fr;
+          grid-template-areas: "top date" "days card" "chips card" ". card"; gap: 10px 16px;
+          padding: calc(8px + env(safe-area-inset-top, 0px)) calc(12px + env(safe-area-inset-right, 0px)) 8px calc(12px + env(safe-area-inset-left, 0px));
+        }
+        .top { grid-area: top; }
+        .ttl, .top > span { display: none; }
+        .date { grid-area: date; align-self: center; text-align: left; font-size: 17px; }
+        .days { grid-area: days; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+        .days button { flex-direction: row; justify-content: flex-start; gap: 8px; padding: 2px 4px; border-radius: 18px; }
+        .days .l { width: 22px; font-size: 13px; }
+        .days .n { width: 30px; height: 30px; line-height: 30px; font-size: 15px; }
+        .chips { grid-area: chips; flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+        .chips button { padding: 6px 12px; }
+        .sheet > .card { grid-area: card; align-self: start; }
+      }
     `,
   ];
 }

@@ -342,7 +342,12 @@ export class WetterApp extends LitElement {
         .cond { font-size: 16px; }
         .hl { font-size: 14px; }
         .app.page { padding-top: 10px; }
-        .tabs button { padding: 8px; }
+        /* Tabs rechts neben den Kopf in dieselbe Zeile */
+        .app { display: grid; grid-template-columns: auto minmax(260px, 1fr); column-gap: 32px; }
+        .app > header { grid-column: 1; justify-content: start; padding: 0 0 0 8px; }
+        .app > nav { grid-column: 2; align-self: center; }
+        .app > main { grid-column: 1 / -1; }
+        .tabs button { padding: 10px 8px; }
       }
 
       /* Tabs im Stil der HA-Oberfläche: Text + Unterstrich in Primärfarbe */
