@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { ForecastController } from "../data/forecast";
 import { fetchStatistics } from "../data/statistics";
 import { cardStyles } from "../components/styles";
+import { keepDay, shownDay, type ShownDay } from "../components/day-detail";
 import type { ForecastItem, HomeAssistant, StatResult, StatValue, WetterConfig } from "../types";
 import { conditionLabel } from "../util/conditions";
 import { compass, hour, num, stateNum, temp, weekday } from "../util/format";
@@ -47,6 +48,7 @@ export class WetterKompakt extends LitElement {
   /** offenes Tages-Popup (Index in der Tagesvorhersage) */
   private _detail?: number;
   private _detailEl?: HTMLElement & Record<string, unknown>;
+  private _shown?: ShownDay;
 
   private hourly = new ForecastController(this, "hourly", () => this._config?.weather);
   private daily = new ForecastController(this, "daily", () => this._config?.weather);
@@ -81,6 +83,9 @@ export class WetterKompakt extends LitElement {
     super.disconnectedCallback();
     this._ro?.disconnect();
     this.syncDetail();
+    // Ansicht verlassen → Popup zu, sonst geht es bei der Rückkehr von selbst wieder auf
+    // (nur kurz umgehängt, z. B. beim Umsortieren durch HA → bleibt offen)
+    setTimeout(() => { if (!this.isConnected) this._detail = undefined; });
   }
 
   // nur neu rendern, wenn sich eine relevante Entität geändert hat
@@ -100,7 +105,14 @@ export class WetterKompakt extends LitElement {
 
   /** Tages-Popup wie in der Wetter-App, direkt über dem Dashboard (Schließen bleibt auf dem Dashboard) */
   private syncDetail(): void {
-    if (!this.isConnected || this._detail == null || !this.daily.forecast || !this.hass) {
+    const nowTemp = stateNum(this.hass, this._config?.sensors?.temperature) ?? this.hass?.states[this._config?.weather]?.attributes.temperature;
+    const daily = this._detail != null && this.hass ? withMeasuredToday(this.daily.forecast, this._m.temp, nowTemp) : undefined;
+    if (this.isConnected && daily) {
+      const i = keepDay(daily, this._detail!, this._shown);
+      if (i == null || i !== this._detail) { this._detail = i; return; } // anderer Tag-Index bzw. schließen → neu zeichnen
+      this._shown = shownDay(daily, i);
+    } else {
+      this._shown = undefined;
       this._detailEl?.remove();
       this._detailEl = undefined;
       return;
@@ -115,12 +127,8 @@ export class WetterKompakt extends LitElement {
       document.body.appendChild(el);
       this._detailEl = el;
     }
-    const nowTemp = stateNum(this.hass, this._config.sensors?.temperature) ?? this.hass.states[this._config.weather]?.attributes.temperature;
-    Object.assign(el, {
-      hass: this.hass, config: this._config, hourly: this.hourly.forecast ?? [],
-      daily: withMeasuredToday(this.daily.forecast, this._m.temp, nowTemp), index: this._detail,
-    });
-    el.classList.toggle("dark", !!this.hass.themes?.darkMode);
+    Object.assign(el, { hass: this.hass, config: this._config, hourly: this.hourly.forecast ?? [], daily, index: this._detail });
+    el.classList.toggle("dark", !!this.hass?.themes?.darkMode);
   }
 
   /**
@@ -128,6 +136,7 @@ export class WetterKompakt extends LitElement {
    * (Stundenwerte schreibt HA erst am Stundenende).
    */
   private load(): void {
+    if (!this._config) return;
     const s = this._config.sensors ?? {};
     const ids = [s.rain_total, s.temperature, s.wind_gust].filter(Boolean) as string[];
     if (!this.hass || !ids.length) return;

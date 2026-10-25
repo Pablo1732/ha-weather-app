@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
-import { fetchStatistics } from "../data/statistics";
-import type { ForecastItem, HomeAssistant, StatResult, WetterConfig } from "../types";
+import { fetchStatistics, fetchUntilNow } from "../data/statistics";
+import type { ForecastItem, HomeAssistant, StatResult, StatType, WetterConfig } from "../types";
 import { conditionLabel } from "../util/conditions";
 import { compass, num, rain, stateNum, temp } from "../util/format";
 import { weatherIcon } from "../util/icons";
@@ -23,6 +23,24 @@ function dayStart(iso: string): number {
   const d = new Date(iso);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
+
+/** Zuletzt angezeigter Tag eines offenen Tagesdetails (Index + Tagesbeginn) */
+export interface ShownDay { index: number; day: number }
+
+/**
+ * Welcher Index soll das offene Tagesdetail jetzt zeigen?
+ * Verschiebt sich die Tagesvorhersage (um Mitternacht fällt gestern raus), bleibt derselbe Tag offen;
+ * gibt es den Tag bzw. Index nicht mehr → undefined (schließen, statt leer den Bildschirm zu sperren).
+ */
+export function keepDay(daily: ForecastItem[], index: number, shown?: ShownDay): number | undefined {
+  if (shown && shown.index === index) {
+    const i = daily.findIndex((d) => dayStart(d.datetime) === shown.day);
+    return i >= 0 ? i : undefined;
+  }
+  return index >= 0 && index < daily.length ? index : undefined;
+}
+
+export const shownDay = (daily: ForecastItem[], index: number): ShownDay => ({ index, day: dayStart(daily[index].datetime) });
 
 /**
  * Tagesdetail als Vollbild-Ebene (mobil) bzw. Dialog (Desktop):
@@ -47,18 +65,24 @@ export class WetterDayDetail extends LitElement {
   index = 0;
   metric: Metric = "temp";
   private _past?: StatResult;
+  /** 5-Minuten-Werte der laufenden Stunde (nur heute) — für Summen/Maxima, nicht fürs Stunden-Diagramm */
+  private _pastNow?: StatResult;
   private _pastKey?: string;
 
   private readonly onKey = (e: KeyboardEvent) => e.key === "Escape" && this.close();
+  // Drehen/Fenstergröße → Diagrammhöhe neu berechnen (chartHeight hängt an der Fensterhöhe)
+  private readonly onResize = () => this.requestUpdate();
 
   connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("keydown", this.onKey);
+    window.addEventListener("resize", this.onResize);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     window.removeEventListener("keydown", this.onKey);
+    window.removeEventListener("resize", this.onResize);
   }
 
   private close(): void {
@@ -80,11 +104,13 @@ export class WetterDayDetail extends LitElement {
     const key = `${start}|${end}`;
     if (key === this._pastKey) return;
     this._pastKey = key;
-    fetchStatistics(this.hass, {
-      ids: [s.temperature, s.rain_total, s.wind_speed, s.wind_gust].filter(Boolean) as string[],
-      start: new Date(start), end: new Date(end), period: "hour", types: ["mean", "max", "change"],
-    }).then(
-      (r) => key === this._pastKey && (this._past = r),
+    const ids = [s.temperature, s.rain_total, s.wind_speed, s.wind_gust].filter(Boolean) as string[];
+    const types: StatType[] = ["mean", "max", "change"];
+    const req = end < start + 24 * HOUR
+      ? fetchUntilNow(this.hass, { ids, start: new Date(start), types })
+      : fetchStatistics(this.hass, { ids, start: new Date(start), end: new Date(end), period: "hour", types }).then((hours) => ({ hours, current: {} }));
+    req.then(
+      (r) => key === this._pastKey && ((this._past = r.hours), (this._pastNow = r.current)),
       () => (this._pastKey = undefined), // Diagramm zeigt dann nur die Vorhersage
     );
   }
@@ -156,7 +182,7 @@ export class WetterDayDetail extends LitElement {
       </div>`;
     }
     if (this.metric === "rain") {
-      const measured = isToday && s.rain_total ? this.pastRows(s.rain_total).reduce((a, r) => a + (r.change ?? 0), 0) : undefined;
+      const measured = isToday && s.rain_total ? this.allRows(s.rain_total).reduce((a, r) => a + (r.change ?? 0), 0) : undefined;
       const maxProb = Math.max(0, ...hours.map((h) => h.precipitation_probability ?? 0), day.precipitation_probability ?? 0);
       return html`<div class="sum">
         <div>
@@ -172,7 +198,7 @@ export class WetterDayDetail extends LitElement {
     const bearing = day.wind_bearing ?? (bearings.length
       ? (Math.atan2(bearings.reduce((a, d) => a + Math.sin((d * Math.PI) / 180), 0), bearings.reduce((a, d) => a + Math.cos((d * Math.PI) / 180), 0)) * 180) / Math.PI
       : undefined);
-    const gust = s.wind_gust && isToday ? Math.max(...this.pastRows(s.wind_gust).map((r) => r.max ?? 0), 0) : undefined;
+    const gust = s.wind_gust && isToday ? Math.max(...this.allRows(s.wind_gust).map((r) => r.max ?? 0), 0) : undefined;
     return html`<div class="sum">
       <div>
         <div class="big">${num(avg, 0)} km/h ${bearing != null ? html`<span class="dir">${compass(bearing)}</span>` : nothing}</div>
@@ -181,8 +207,14 @@ export class WetterDayDetail extends LitElement {
     </div>`;
   }
 
+  /** volle Stunden (Diagramm) */
   private pastRows(id: string) {
     return this._past?.[id] ?? [];
+  }
+
+  /** inkl. laufender Stunde (Summen, Maxima) */
+  private allRows(id: string) {
+    return [...this.pastRows(id), ...(this._pastNow?.[id] ?? [])];
   }
 
   /** Querformat mit wenig Höhe (Echo Show): Diagramm füllt den Platz rechts statt fester 220 px */

@@ -1,9 +1,9 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { ForecastController } from "../data/forecast";
-import { fetchStatistics } from "../data/statistics";
+import { fetchUntilNow, joinStats } from "../data/statistics";
 import { cardStyles, head } from "../components/styles";
 import { renderTiles, tileStyles } from "../components/tiles";
-import type { Metric } from "../components/day-detail";
+import { keepDay, shownDay, type Metric, type ShownDay } from "../components/day-detail";
 import type { ForecastItem, HomeAssistant, StatResult, WetterConfig } from "../types";
 import { conditionLabel, tint } from "../util/conditions";
 import { hour, stateNum, temp, weekday } from "../util/format";
@@ -105,6 +105,9 @@ export class WetterApp extends LitElement {
     this._hoursRo?.disconnect();
     this._hoursEl = undefined;
     this.syncDetail();
+    // Ansicht verlassen → Detail zu, sonst geht es bei der Rückkehr von selbst wieder auf
+    // (nur kurz umgehängt, z. B. beim Umsortieren durch HA → bleibt offen)
+    setTimeout(() => { if (!this.isConnected) this._detail = undefined; });
   }
 
   /**
@@ -112,9 +115,18 @@ export class WetterApp extends LitElement {
    * eingesperrt — am iPhone unter der HA-Kopfleiste, am PC nur über dem Kartenbereich statt mittig.
    */
   private _detailEl?: HTMLElement & Record<string, unknown>;
+  private _shown?: ShownDay;
   private syncDetail(): void {
-    const open = this.isConnected && this._tab === "forecast" && this._detail != null && !!this.daily.forecast;
-    if (!open) {
+    const daily = this._config && this._detail != null
+      ? this.dailyForecast(stateNum(this.hass, this._config.sensors?.temperature) ?? this.hass?.states[this._config.weather]?.attributes.temperature)
+      : undefined;
+    const open = this.isConnected && this._tab === "forecast" && !!daily;
+    if (open) {
+      const i = keepDay(daily!, this._detail!, this._shown);
+      if (i == null || i !== this._detail) { this._detail = i; return; } // anderer Tag-Index bzw. schließen → neu zeichnen
+      this._shown = shownDay(daily!, i);
+    } else {
+      this._shown = undefined;
       this._detailEl?.remove();
       this._detailEl = undefined;
       return;
@@ -130,7 +142,7 @@ export class WetterApp extends LitElement {
     }
     Object.assign(el, {
       hass: this.hass, config: this._config, hourly: this.hourly.forecast ?? [],
-      daily: this.dailyForecast(stateNum(this.hass, this._config.sensors?.temperature) ?? this.hass?.states[this._config.weather]?.attributes.temperature), index: this._detail, metric: this._metric,
+      daily, index: this._detail, metric: this._metric,
     });
     el.classList.toggle("dark", !!this.hass?.themes?.darkMode);
   }
@@ -165,7 +177,7 @@ export class WetterApp extends LitElement {
     this.syncDetail();
   }
 
-  /** Letzte 24 h stündlich: Regen gemessen + Luftdruck-Tendenz für die Kacheln. */
+  /** Letzte 24 h: Stundenwerte + laufende Stunde (5 min) — Regen gemessen, Luftdruck-Tendenz, Temperatur-Min/Max heute. */
   private loadRecent(): void {
     const s = this._config.sensors ?? {};
     const ids = [s.rain_total, s.pressure, s.temperature].filter(Boolean) as string[];
@@ -174,10 +186,9 @@ export class WetterApp extends LitElement {
     const key = String(end);
     if (key === this._recentKey) return;
     this._recentKey = key;
-    fetchStatistics(this.hass, {
-      ids, start: new Date(end - 86_400_000), end: new Date(end), period: "hour", types: ["mean", "min", "max", "change"],
-    }).then(
-      (r) => key === this._recentKey && (this._recent = r),
+    const hourStart = Math.floor(Date.now() / 3_600_000) * 3_600_000;
+    fetchUntilNow(this.hass, { ids, start: new Date(hourStart - 23 * 3_600_000), types: ["mean", "min", "max", "change"] }).then(
+      (r) => key === this._recentKey && (this._recent = joinStats(r.hours, r.current)),
       () => (this._recentKey = undefined),
     );
   }

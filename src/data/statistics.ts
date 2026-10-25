@@ -10,6 +10,23 @@ export interface StatQuery {
 
 const LIVE_TTL = 5 * 60_000;
 const MAX_ENTRIES = 60;
+const SETTLE = 15 * 60_000;
+
+/** Stundenwerte bis zur laufenden Stunde + 5-Minuten-Werte der laufenden Stunde, je Sensor aneinandergehängt. */
+export function fetchUntilNow(hass: HomeAssistant, q: Omit<StatQuery, "end" | "period">): Promise<{ hours: StatResult; current: StatResult }> {
+  const now = Math.ceil(Date.now() / 300_000) * 300_000;
+  const hourStart = Math.floor(Date.now() / 3_600_000) * 3_600_000;
+  return Promise.all([
+    fetchStatistics(hass, { ...q, end: new Date(hourStart), period: "hour" }),
+    now > hourStart ? fetchStatistics(hass, { ...q, start: new Date(hourStart), end: new Date(now), period: "5minute" }) : Promise.resolve({}),
+  ]).then(([hours, current]) => ({ hours, current }));
+}
+
+export function joinStats(a: StatResult, b: StatResult): StatResult {
+  const out: StatResult = { ...a };
+  for (const [id, rows] of Object.entries(b)) out[id] = [...(out[id] ?? []), ...rows];
+  return out;
+}
 
 interface CacheEntry {
   promise: Promise<StatResult>;
@@ -42,7 +59,8 @@ export function fetchStatistics(hass: HomeAssistant, q: StatQuery): Promise<Stat
     })
     .then(normalize);
 
-  const entry: CacheEntry = { promise, expires: q.end.getTime() < now ? Infinity : now + LIVE_TTL };
+  // abgeschlossen erst mit Abstand zum Ende: HA schreibt Stunden-/Tageswerte erst kurz danach
+  const entry: CacheEntry = { promise, expires: q.end.getTime() < now - SETTLE ? Infinity : now + LIVE_TTL };
   cache.set(key, entry);
   // Fehler nicht cachen, sonst bleibt die Karte bis zum Reload leer
   promise.catch(() => cache.get(key) === entry && cache.delete(key));

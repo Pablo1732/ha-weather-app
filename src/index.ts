@@ -9,7 +9,7 @@ declare const __VERSION__: string;
 
 const cards: [string, CustomElementConstructor, string, string][] = [
   ["wetter-app", WetterApp, "Wetter-App", "Komplette Wetter-App mit Vorhersage und Historie"],
-  ["wetter-app-kompakt", WetterKompakt, "Wetter-App kompakt", "Das Wichtigste aus Vorhersage und Historie, Knopf zur Wetter-App"],
+  ["wetter-app-kompakt", WetterKompakt, "Wetter-App kompakt", "Das Wichtigste aus Vorhersage und Historie, antippen öffnet die Wetter-App"],
 ];
 
 // interne Bausteine (nicht im Kartenwähler)

@@ -158,10 +158,15 @@ export class WetterHistory extends LitElement {
 
   // ---------- Helfer ----------
 
-  private rows(res: StatResult | undefined, id: string | undefined, r: TimeRange): StatValue[] {
-    // nur Abschnitte innerhalb des Zeitraums — HA liefert teils den angrenzenden mit (sonst z. B. ein 13. Monat rechts außerhalb)
+  /** nur Abschnitte innerhalb des Zeitraums — HA liefert teils den angrenzenden mit (sonst z. B. ein 13. Monat rechts außerhalb) */
+  private inRange(res: StatResult | undefined, id: string | undefined, r: TimeRange): StatValue[] {
     const s0 = r.start.getTime(), e0 = r.end.getTime();
-    const rows = ((id && res?.[id]) || []).filter((x) => x.start < e0 && x.end > s0);
+    return ((id && res?.[id]) || []).filter((x) => x.start < e0 && x.end > s0);
+  }
+
+  /** wie inRange, im Jahr zu Monaten zusammengefasst (Diagramme, Tabelle) */
+  private rows(res: StatResult | undefined, id: string | undefined, r: TimeRange): StatValue[] {
+    const rows = this.inRange(res, id, r);
     return r.preset === "year" ? byMonth(rows) : rows;
   }
 
@@ -204,15 +209,15 @@ export class WetterHistory extends LitElement {
   private renderSummary(r: TimeRange, d: Data) {
     const s = this.config.sensors ?? {};
     const p = this.periods(r);
-    const t = (s.temperature && d.main[s.temperature]) || [];
+    const t = this.inRange(d.main, s.temperature, r);
     const lo = extreme(t, "min", Math.min), hi = extreme(t, "max", Math.max);
     const mean = avg(t.map((x) => x.mean));
-    const rainRows = (s.rain_total && d.rain[s.rain_total]) || [];
+    const rainRows = this.inRange(d.rain, s.rain_total, r);
     const rainSum = rainRows.reduce((a, x) => a + (x.change ?? 0), 0);
     const wet = rainRows.filter((x) => (x.change ?? 0) >= RAIN_DAY).length;
-    const gust = extreme((s.wind_gust && d.main[s.wind_gust]) || [], "max", Math.max);
-    const wind = avg(((s.wind_speed && d.main[s.wind_speed]) || []).map((x) => x.mean));
-    const hum = avg(((s.humidity && d.main[s.humidity]) || []).map((x) => x.mean));
+    const gust = extreme(this.inRange(d.main, s.wind_gust, r), "max", Math.max);
+    const wind = avg(this.inRange(d.main, s.wind_speed, r).map((x) => x.mean));
+    const hum = avg(this.inRange(d.main, s.humidity, r).map((x) => x.mean));
     const when = this.fmt({ ...r, preset: r.preset === "year" ? "30d" : r.preset }, p.main);
     return html`<div class="grid">
       <section class="card kv">${head("mdi:thermometer", "Temperatur")}

@@ -103,7 +103,9 @@ function pressureTile({ hass, config, recent }: TileData) {
   const p = stateNum(hass, s.pressure);
   if (p == null) return nothing;
   const rows = s.pressure ? recent?.[s.pressure] : undefined;
-  const ref = rows && rows.length >= 3 ? rows[rows.length - 3].mean : undefined;
+  // nur volle Stunden — die laufende Stunde kommt als 5-Minuten-Werte dazu
+  const hours = rows?.filter((r) => r.end - r.start >= 3_600_000);
+  const ref = hours && hours.length >= 3 ? hours[hours.length - 3].mean : undefined;
   const diff = ref != null ? p - ref : undefined;
   const trend = diff == null ? "" : diff > 1 ? "steigend" : diff < -1 ? "fallend" : "gleichbleibend";
   // Zeiger zeigt die 3-Stunden-Tendenz (−4 … +4 hPa) — unabhängig von der Höhen-Kalibrierung der Station
