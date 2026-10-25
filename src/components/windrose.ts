@@ -21,24 +21,44 @@ const BFT: Bft[] = [
 ];
 const DIRS = ["N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
 const bftOf = (sp: number) => BFT.findIndex((b) => sp < b.max);
+const TAIL = 3; // ab dieser Stufe kurze Spitzen innerhalb eines Intervalls mitzählen
+
+/**
+ * Anteile eines Statistik-Intervalls an den Beaufort-Stufen.
+ * Das Mittel bestimmt den Hauptteil (entspricht über die Zeit gemessen gut den Rohdaten); kurze stärkere
+ * Phasen gehen im Mittel unter und werden aus min/mean/max per Dreiecksverteilung geschätzt.
+ */
+function shares(r: StatValue): [number, number][] {
+  const c = bftOf(r.mean!);
+  const a = r.min, b = r.max, m = r.mean!;
+  if (a == null || b == null || b < BFT[TAIL].min || b - a < 0.01) return [[c, 1]];
+  const mode = Math.min(b, Math.max(a, 3 * m - a - b));
+  const F = (x: number) => x <= a ? 0 : x >= b ? 1
+    : x <= mode ? (x - a) ** 2 / ((b - a) * (mode - a || 1e-9)) : 1 - (b - x) ** 2 / ((b - a) * (b - mode || 1e-9));
+  const p = BFT.map((k) => F(k.max) - F(k.min));
+  if (c >= TAIL) return p.map((v, k) => [k, v] as [number, number]).filter(([, v]) => v > 0);
+  const tail = p.slice(TAIL).reduce((x, y) => x + y, 0);
+  return [[c, 1 - tail] as [number, number], ...p.map((v, k) => [k, v] as [number, number]).filter(([k, v]) => k >= TAIL && v > 0)];
+}
 
 export interface WindNow { direction?: number; speed?: number }
 export interface RoseOpts { now?: WindNow; selected?: number; up?: boolean; onSelect?: (i: number | undefined, up?: boolean) => void }
 
 export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[] = [], o: RoseOpts = {}) {
   const now = o.now ?? {};
-  const speedAt = new Map(speedRows.map((r) => [r.start, r.mean]));
+  const speedAt = new Map(speedRows.map((r) => [r.start, r]));
   const counts = DIRS.map(() => BFT.map(() => 0)); // [Richtung][Stufe], Stufe 0 bleibt leer
   const totals = BFT.map(() => 0);
   let total = 0;
   for (const r of dirRows) {
     const sp = speedAt.get(r.start);
-    if (r.mean == null || sp == null) continue;
+    if (r.mean == null || sp?.mean == null) continue;
     total++;
-    const c = bftOf(sp);
-    totals[c]++;
-    if (c === 0) continue;
-    counts[Math.round((((r.mean % 360) + 360) % 360) / 22.5) % 16][c]++;
+    const d = Math.round((((r.mean % 360) + 360) % 360) / 22.5) % 16;
+    for (const [c, w] of shares(sp)) {
+      totals[c] += w;
+      if (c > 0) counts[d][c] += w;
+    }
   }
   if (!total) return html`<div class="hint">Keine Winddaten im Zeitraum.</div>`;
 
@@ -98,7 +118,7 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
     const b = shown[ni], hi = Number.isFinite(b.max) ? b.max : b.min + 20;
     nowPos = startOf(ni) + Math.min(1, (now.speed! - b.min) / (hi - b.min)) * (b.w / wSum) * 100;
   }
-  const label = (v: number) => (v >= 1 ? `${Math.round(v)}%` : `${num(v, 1)}%`);
+  const label = (v: number) => (v >= 1 ? `${Math.round(v)}%` : v >= 0.05 ? `${num(v, 1)}%` : "<0,1%");
   const sel = o.selected != null ? BFT[o.selected] : undefined;
   // Maus: Hover zeigt Details; Touch: Antippen schaltet um
   // Detail nach unten öffnen, außer der Bildschirm ist unterhalb zu knapp
@@ -129,7 +149,7 @@ export function renderWindrose(dirRows: StatValue[] = [], speedRows: StatValue[]
           <div class="tr"><i style="background:${sel.color}"></i><b>Beaufort ${sel.label}</b></div>
           <div class="tr"><span>${sel.name}</span></div>
           <div class="tr"><span>Wind</span><b>${range(sel)} km/h</b></div>
-          <div class="tr"><span>Anteil</span><b>${num(pct(totals[o.selected!]), 1)} %</b></div>
+          <div class="tr"><span>Anteil</span><b>${label(pct(totals[o.selected!]))}</b></div>
         </div>` : ""}
         <div class="segs">${shown.map((b) => html`<button style="flex:${b.w} 1 0;background:${b.color};color:${b.text}" class=${o.selected === b.i ? "on" : ""}
           @click=${(e: Event) => pick(e, b.i)} @pointerenter=${(e: PointerEvent) => enter(e, b.i)} @pointerleave=${leave}>${label(b.share)}</button>`)}</div>
@@ -160,7 +180,7 @@ export const windroseStyles = css`
   .nums span { min-width: 0; text-align: center; cursor: pointer; }
   .bl { text-align: center; font-size: 12px; color: var(--wa-text2); margin-top: 2px; }
   .btip {
-    position: absolute; top: 100%; transform: translateX(-50%); margin-top: 2px; pointer-events: none; z-index: 1; min-width: 130px;
+    position: absolute; top: 34px; transform: translateX(-50%); pointer-events: none; z-index: 1; min-width: 130px;
     background: var(--card-background-color, #222); color: var(--primary-text-color);
     border: 1px solid var(--divider-color); border-radius: 8px; padding: 6px 8px; font-size: 12px; line-height: 1.5;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); white-space: nowrap;

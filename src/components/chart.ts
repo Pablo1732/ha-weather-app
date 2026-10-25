@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, svg, type PropertyValues, type SVGTemplateResult } from "lit";
 import { num } from "../util/format";
+import { onOtherTip, tipOpened } from "../util/tip-bus";
 
 // Schlankes SVG-Zeitdiagramm (Linie, Fläche, Band, Balken) — ersetzt schwere Chart-Bibliotheken.
 // Rendert nur bei geänderten Daten oder Breite; Antippen/Hovern zeigt Werte zum Zeitpunkt.
@@ -83,6 +84,7 @@ export class WetterChart extends LitElement {
   // Touch: erst nach der ersten Bewegung entscheiden — waagrecht/langes Drücken = Werte ansehen, sonst normal scrollen
   private _touch?: { x: number; y: number; mode: "?" | "scrub" | "scroll"; timer?: number };
   private _hideTimer?: number;
+  private _offTip?: () => void;
   private _onTouchStart = (e: TouchEvent) => this.touchStart(e);
   private _onTouchMove = (e: TouchEvent) => this.touchMove(e);
   private _onTouchEnd = () => this.touchEnd();
@@ -94,6 +96,7 @@ export class WetterChart extends LitElement {
       if (w && w !== this._w) this._w = w;
     });
     this._ro.observe(this);
+    this._offTip = onOtherTip(this, () => (this._hover = undefined));
     this.addEventListener("touchstart", this._onTouchStart, { passive: true });
     // nicht passiv, sonst lässt sich das Scrollen beim Werte-Ansehen nicht unterdrücken
     this.addEventListener("touchmove", this._onTouchMove, { passive: false });
@@ -104,6 +107,7 @@ export class WetterChart extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this._ro?.disconnect();
+    this._offTip?.();
     this.removeEventListener("touchstart", this._onTouchStart);
     this.removeEventListener("touchmove", this._onTouchMove);
     this.removeEventListener("touchend", this._onTouchEnd);
@@ -113,7 +117,8 @@ export class WetterChart extends LitElement {
   }
 
   protected willUpdate(changed: PropertyValues): void {
-    if (changed.has("series") || changed.has("start")) this._hover = undefined;
+    // nur bei anderem Zeitraum zurücksetzen — neue Datenreihen (Live-Update, Neuzeichnen) lassen das Detail offen
+    if (changed.has("start") && changed.get("start") !== undefined && changed.get("start") !== this.start) this._hover = undefined;
   }
 
   // ---- Skalen ----
@@ -207,6 +212,7 @@ export class WetterChart extends LitElement {
         if (best == null || Math.abs(c - t) < Math.abs(best - t)) best = c;
       }
     }
+    if (this._hover == null && best != null) tipOpened(this);
     this._hover = best;
   }
 

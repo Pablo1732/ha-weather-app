@@ -8,15 +8,16 @@ import type { ChartSeries, ChartTick } from "./chart";
 import { rangeStyles, renderRangeSelector } from "./range-selector";
 import { cardStyles, head } from "./styles";
 import { renderWindrose, windroseStyles } from "./windrose";
+import { onOtherTip, tipOpened } from "../util/tip-bus";
 
 // Historie: gemeinsamer Zeitraum für alle Diagramme, Daten aus der Langzeitstatistik.
 
 type Extra = "pressure" | "humidity" | "solar" | "uv";
-const EXTRAS: { id: Extra; label: string; unit: string; digits: number }[] = [
-  { id: "pressure", label: "Luftdruck", unit: " hPa", digits: 1 },
-  { id: "humidity", label: "Feuchte", unit: " %", digits: 0 },
-  { id: "solar", label: "Sonne", unit: " W/m²", digits: 0 },
-  { id: "uv", label: "UV", unit: "", digits: 1 },
+const EXTRAS: { id: Extra; label: string; unit: string; digits: number; color: string }[] = [
+  { id: "pressure", label: "Luftdruck", unit: " hPa", digits: 1, color: "var(--wa-accent)" },
+  { id: "humidity", label: "Feuchte", unit: " %", digits: 0, color: "#4dd0e1" },
+  { id: "solar", label: "Sonne", unit: " W/m²", digits: 0, color: "#ffb300" },
+  { id: "uv", label: "UV", unit: "", digits: 1, color: "#ab47bc" },
 ];
 
 const MONTHS = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
@@ -75,6 +76,18 @@ export class WetterHistory extends LitElement {
     };
   }
 
+  private _offTip?: () => void;
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    this._offTip = onOtherTip(this, () => (this._bft = undefined));
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._offTip?.();
+  }
+
   protected updated(): void {
     this.load();
   }
@@ -97,7 +110,7 @@ export class WetterHistory extends LitElement {
       const [main, rainRes, dir, prevT, prevR] = await Promise.all([
         q(ids([s.temperature, s.humidity, s.pressure, s.solar, s.uv, s.wind_speed, s.wind_gust]), p.main, ["mean", "min", "max"]),
         q(ids([s.rain_total]), p.rain, ["change"]),
-        q(ids([s.wind_direction, p.rose !== p.main ? s.wind_speed : undefined]), p.rose, ["mean"]),
+        q(ids([s.wind_direction, p.rose !== p.main ? s.wind_speed : undefined]), p.rose, ["mean", "min", "max"]),
         this._compare ? q(ids([s.temperature]), p.main, ["mean", "min", "max"], prevStart, prevEnd) : undefined,
         this._compare ? q(ids([s.rain_total]), p.rain, ["change"], prevStart, prevEnd) : undefined,
       ]);
@@ -301,7 +314,11 @@ export class WetterHistory extends LitElement {
         now: r.live ? { direction: stateNum(this.hass, s.wind_direction), speed: stateNum(this.hass, s.wind_speed) } : {},
         selected: this._bft,
         up: this._bftUp,
-        onSelect: (i, up) => { this._bft = i; this._bftUp = !!up; },
+        onSelect: (i, up) => {
+          if (i != null && this._bft == null) tipOpened(this);
+          this._bft = i;
+          this._bftUp = !!up;
+        },
       }) : nothing}
       ${this.chart(r, series, { yMin: 0, period: p.main, height: 160 })}
       <div class="legend"><i class="ln" style="background:#81c784"></i>Durchschnitt<i class="ln" style="background:#ffb74d"></i>stärkste Böe</div>
@@ -317,13 +334,13 @@ export class WetterHistory extends LitElement {
     const rows = this.rows(d.main, s[cur.id], r);
     const center = (x: StatValue) => x.start + (x.end - x.start) / 2;
     const series: ChartSeries[] = [
-      { type: "band", points: rows.map((x) => ({ t: center(x), v: x.min, v2: x.max })), color: "var(--wa-accent)", unit: cur.unit, digits: cur.digits },
-      { type: "line", points: rows.map((x) => ({ t: center(x), v: x.mean })), color: "var(--wa-accent)", label: "Ø", unit: cur.unit, digits: cur.digits },
+      { type: "band", points: rows.map((x) => ({ t: center(x), v: x.min, v2: x.max })), color: cur.color, unit: cur.unit, digits: cur.digits },
+      { type: "line", points: rows.map((x) => ({ t: center(x), v: x.mean })), color: cur.color, label: "Ø", unit: cur.unit, digits: cur.digits },
     ];
     return html`<section class="card">${head("mdi:chart-bell-curve-cumulative", "Weitere Werte")}
       <div class="chips small">${avail.map((e) => html`<button class=${e === cur ? "on" : ""} @click=${() => (this._extra = e.id)}>${e.label}</button>`)}</div>
       ${this.chart(r, series, { period: p.main, yMin: cur.id === "pressure" ? undefined : 0 })}
-      <div class="legend"><i class="ln" style="background:var(--wa-accent)"></i>Durchschnitt<i style="background:var(--wa-accent);opacity:.3"></i>Min–Max</div>
+      <div class="legend"><i class="ln" style="background:${cur.color}"></i>Durchschnitt<i style="background:${cur.color};opacity:.3"></i>Min–Max</div>
     </section>`;
   }
 
